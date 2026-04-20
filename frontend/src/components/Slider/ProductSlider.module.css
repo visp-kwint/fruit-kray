@@ -1,0 +1,40 @@
+.sliderSection {
+  margin-bottom: 64px;
+}
+
+.sliderHeader {
+  margin-bottom: 32px;
+}
+
+.sliderWrap {
+  margin: 0 -8px;
+}
+
+.slide {
+  padding: 8px 12px;
+}
+
+.skeletonRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+.skeletonCard {
+  height: 320px;
+  border-radius: var(--radius-lg);
+}
+
+.empty {
+  color: var(--gray-600);
+  font-size: 15px;
+  padding: 40px 0;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .skeletonRow { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .skeletonRow { grid-template-columns: 1fr; }
+}
