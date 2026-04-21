@@ -11,7 +11,7 @@ const FiltersSchema = z.object({
   minPrice: z.coerce.number().nonnegative().optional(),
   maxPrice: z.coerce.number().nonnegative().optional(),
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(200).default(20),  // ← max: 200
 });
 
 router.get('/', async (req: Request, res: Response) => {

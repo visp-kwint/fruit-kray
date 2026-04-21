@@ -56,7 +56,7 @@ export default function AdminPage() {
     setLoading(true);
     try {
       const [pRes, cRes, mRes] = await Promise.all([
-        productsAPI.getAll({ limit: 200 }),
+        productsAPI.getAll({ limit: 100 }),  // ← limit: 100 вместо 200
         categoriesAPI.getAdminAll(),
         adminAPI.getAdModals(),
       ]);

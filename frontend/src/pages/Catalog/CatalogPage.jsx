@@ -33,7 +33,7 @@ export default function CatalogPage() {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const params = { page: 1, limit: 200 };
+        const params = { page: 1, limit: 100 };  // ← limit: 100 вместо 200
         if (categorySlug !== 'all') params.categorySlug = categorySlug;
         if (search.trim())  params.search   = search.trim();
         if (minPrice)       params.minPrice = Number(minPrice);

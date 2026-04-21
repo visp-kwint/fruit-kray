@@ -23,7 +23,7 @@ export default function Header() {
       <div className={`${styles.inner} container`}>
         {/* Логотип */}
         <Link to="/" className={styles.logo}>
-          <span className={styles.logoIcon}>🍒</span>
+          <span className={styles.logoIcon}></span>
           <span className={styles.logoText}>Фрукт Край</span>
         </Link>
 

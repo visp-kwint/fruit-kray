@@ -24,19 +24,19 @@ export default function HomePage() {
       <section className={`section ${styles.showcase}`}>
         <div className="container">
           <ProductSlider
-            title="🔥 Популярные десерты"
+            title="Популярные десерты"
             subtitle="Самое любимое у наших покупателей"
             params={{ is_popular: true, category: 'desserts', limit: 8 }}
           />
 
           <ProductSlider
-            title="✨ Новинки недели"
+            title="Новинки недели"
             subtitle="Только что появились в нашем ассортименте"
             params={{ is_new: true, limit: 8 }}
           />
 
           <ProductSlider
-            title="⭐ Товар дня"
+            title="Товар дня"
             subtitle="Специальное предложение — только сегодня"
             params={{ is_day_item: true, limit: 6 }}
             featured={true}
