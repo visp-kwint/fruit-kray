@@ -50,9 +50,7 @@ export default function CartPage() {
                 <div className={styles.itemInfo}>
                   <h3 className={styles.itemName}>{item.name}</h3>
                   <p className={styles.itemCategory}>
-                    {item.category === 'vegetables' ? '🥕 Овощи' :
-                     item.category === 'fruits'     ? '🍎 Фрукты' :
-                                                      '🍰 Десерты'}
+                    {item.categoryName || 'Категория'}
                   </p>
                 </div>
 

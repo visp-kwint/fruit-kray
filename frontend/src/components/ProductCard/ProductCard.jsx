@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import styles from './ProductCard.module.css';
 
-export default function ProductCard({ product, featured = false }) {
+export default function ProductCard({ product, featured = false, onAddToCart }) {
   const { addItem } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -31,6 +31,7 @@ export default function ProductCard({ product, featured = false }) {
     setTimeout(() => {
       setAdding(false);
       setAdded(true);
+      onAddToCart?.(product);
       setTimeout(() => setAdded(false), 1600);
     }, 250);
   };

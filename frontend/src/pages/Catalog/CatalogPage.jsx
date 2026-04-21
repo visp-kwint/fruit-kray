@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { categoriesAPI, productsAPI } from '../../api';
 import ProductDetailsModal from '../../components/ProductDetailsModal/ProductDetailsModal';
+import AdModal from '../../components/AdModal/AdModal';
 import styles from './CatalogPage.module.css';
 
 const BASE_URL =
@@ -12,6 +13,14 @@ function resolveImage(url) {
   return `${BASE_URL}${url}`;
 }
 
+const SORT_OPTIONS = [
+  { value: 'default', label: 'По умолчанию' },
+  { value: 'popular', label: '🔥 Популярные' },
+  { value: 'new', label: '✨ Новинки' },
+  { value: 'cheap', label: 'Сначала дешевле' },
+  { value: 'expensive', label: 'Сначала дороже' },
+];
+
 export default function CatalogPage() {
   const [categories, setCategories] = useState([]);
   const [products, setProducts]     = useState([]);
@@ -19,8 +28,25 @@ export default function CatalogPage() {
   const [search, setSearch]         = useState('');
   const [minPrice, setMinPrice]     = useState('');
   const [maxPrice, setMaxPrice]     = useState('');
+  const [sort, setSort]             = useState('default');
   const [selected, setSelected]     = useState(null);
   const [loading, setLoading]       = useState(true);
+  const [adModalProductId, setAdModalProductId] = useState(null);
+
+  const [catOpen, setCatOpen]       = useState(false);
+  const [sortOpen, setSortOpen]     = useState(false);
+
+  const catRef  = useRef(null);
+  const sortRef = useRef(null);
+
+  useEffect(() => {
+    const onClick = (e) => {
+      if (catRef.current && !catRef.current.contains(e.target))  setCatOpen(false);
+      if (sortRef.current && !sortRef.current.contains(e.target)) setSortOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
 
   useEffect(() => {
     categoriesAPI.getAll().then(({ data }) => {
@@ -33,11 +59,12 @@ export default function CatalogPage() {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const params = { page: 1, limit: 100 };  // ← limit: 100 вместо 200
+        const params = { page: 1, limit: 100 };
         if (categorySlug !== 'all') params.categorySlug = categorySlug;
         if (search.trim())  params.search   = search.trim();
         if (minPrice)       params.minPrice = Number(minPrice);
         if (maxPrice)       params.maxPrice = Number(maxPrice);
+        if (sort !== 'default') params.sort = sort;
 
         const { data } = await productsAPI.getAll(params);
         const list = Array.isArray(data) ? data : data?.products ?? [];
@@ -51,7 +78,21 @@ export default function CatalogPage() {
     }, 300);
 
     return () => clearTimeout(t);
-  }, [categorySlug, search, minPrice, maxPrice]);
+  }, [categorySlug, search, minPrice, maxPrice, sort]);
+
+  const activeCategoryName = categorySlug === 'all'
+    ? 'Все категории'
+    : categories.find((c) => c.slug === categorySlug)?.name || 'Категория';
+
+  const activeSortLabel = SORT_OPTIONS.find((s) => s.value === sort)?.label || 'Сортировка';
+
+  const handleAddToCart = (product) => {
+    setAdModalProductId(product.id);
+  };
+
+  const handleOpenProductDetails = (product) => {
+    setSelected(product);
+  };
 
   return (
     <div className={styles.page}>
@@ -59,7 +100,6 @@ export default function CatalogPage() {
         <h1 className="section-title">Каталог</h1>
         <p className="section-subtitle">Свежие товары с доставкой</p>
 
-        {/* Фильтры */}
         <div className={styles.filters}>
           <input
             className={styles.input}
@@ -68,45 +108,86 @@ export default function CatalogPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
 
-          <div className={styles.chips}>
-            <button
-              type="button"
-              className={`${styles.chip} ${categorySlug === 'all' ? styles.active : ''}`}
-              onClick={() => setCategorySlug('all')}
-            >
-              Все
-            </button>
-            {categories.map((c) => (
+          <div className={styles.filterRow}>
+            <div className={styles.dropdown} ref={sortRef}>
               <button
-                key={c.id}
                 type="button"
-                className={`${styles.chip} ${categorySlug === c.slug ? styles.active : ''}`}
-                onClick={() => setCategorySlug(c.slug)}
+                className={`${styles.dropdownTrigger} ${sortOpen ? styles.dropdownTriggerOpen : ''}`}
+                onClick={() => setSortOpen((v) => !v)}
               >
-                {c.name}
+                <span className={styles.dropdownLabel}>{activeSortLabel}</span>
+                <span className={styles.dropdownArrow}>▾</span>
               </button>
-            ))}
-          </div>
 
-          <div className={styles.priceRow}>
-            <input
-              className={styles.smallInput}
-              placeholder="От ₽"
-              type="number"
-              value={minPrice}
-              onChange={(e) => setMinPrice(e.target.value)}
-            />
-            <input
-              className={styles.smallInput}
-              placeholder="До ₽"
-              type="number"
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value)}
-            />
+              {sortOpen && (
+                <div className={styles.dropdownMenu}>
+                  {SORT_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`${styles.dropdownItem} ${sort === opt.value ? styles.dropdownItemActive : ''}`}
+                      onClick={() => { setSort(opt.value); setSortOpen(false); }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className={styles.dropdown} ref={catRef}>
+              <button
+                type="button"
+                className={`${styles.dropdownTrigger} ${catOpen ? styles.dropdownTriggerOpen : ''}`}
+                onClick={() => setCatOpen((v) => !v)}
+              >
+                <span className={styles.dropdownLabel}>{activeCategoryName}</span>
+                <span className={styles.dropdownArrow}>▾</span>
+              </button>
+
+              {catOpen && (
+                <div className={styles.dropdownMenu}>
+                  <button
+                    type="button"
+                    className={`${styles.dropdownItem} ${categorySlug === 'all' ? styles.dropdownItemActive : ''}`}
+                    onClick={() => { setCategorySlug('all'); setCatOpen(false); }}
+                  >
+                    Все категории
+                  </button>
+                  {categories.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={`${styles.dropdownItem} ${categorySlug === c.slug ? styles.dropdownItemActive : ''}`}
+                      onClick={() => { setCategorySlug(c.slug); setCatOpen(false); }}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className={styles.priceWrap}>
+              <input
+                className={styles.smallInput}
+                placeholder="От ₽"
+                type="number"
+                value={minPrice}
+                onChange={(e) => setMinPrice(e.target.value)}
+              />
+              <span className={styles.priceDash}>—</span>
+              <input
+                className={styles.smallInput}
+                placeholder="До ₽"
+                type="number"
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Список */}
         {loading ? (
           <div className={styles.loadingWrap}>
             <div className={styles.spinner} />
@@ -168,6 +249,13 @@ export default function CatalogPage() {
       <ProductDetailsModal
         product={selected}
         onClose={() => setSelected(null)}
+        onAddToCart={handleAddToCart}
+      />
+
+      <AdModal
+        triggerProductId={adModalProductId}
+        onClose={() => setAdModalProductId(null)}
+        onOpenProductDetails={handleOpenProductDetails}
       />
     </div>
   );

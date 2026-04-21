@@ -2,6 +2,7 @@
   padding: 36px 0 80px;
 }
 
+/* ── Фильтры ────────────────────────────── */
 .filters {
   display: flex;
   flex-direction: column;
@@ -26,42 +27,118 @@
   box-shadow: 0 0 0 3px rgba(139, 26, 46, 0.08);
 }
 
-.chips {
+/* Ряд с dropdown + цена */
+.filterRow {
   display: flex;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
-  gap: 8px;
 }
 
-.chip {
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: 1.5px solid var(--gray-200);
+/* ── Dropdown ───────────────────────────── */
+.dropdown {
+  position: relative;
+  min-width: 180px;
+}
+
+.dropdownTrigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
   background: #fff;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 12px;
+  font-family: var(--font-main);
   font-size: 14px;
   font-weight: 500;
-  color: var(--gray-700);
+  color: var(--gray-900);
+  cursor: pointer;
   transition: all var(--transition);
+  white-space: nowrap;
 }
 
-.chip:hover {
+.dropdownTrigger:hover {
+  border-color: var(--cherry-border);
+}
+
+.dropdownTriggerOpen {
   border-color: var(--cherry);
+  box-shadow: 0 0 0 3px rgba(139, 26, 46, 0.08);
+}
+
+.dropdownLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdownArrow {
+  font-size: 12px;
+  color: var(--gray-500);
+  transition: transform var(--transition);
+}
+
+.dropdownTriggerOpen .dropdownArrow {
+  transform: rotate(180deg);
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  min-width: 100%;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1.5px solid var(--cherry-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  animation: dropdownIn 0.18s ease;
+}
+
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dropdownItem {
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gray-800);
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.dropdownItem:hover {
+  background: var(--cherry-pale);
   color: var(--cherry);
 }
 
-.active {
-  background: var(--cherry);
-  border-color: var(--cherry);
-  color: #fff;
-  font-weight: 600;
+.dropdownItemActive {
+  background: var(--cherry-pale);
+  color: var(--cherry);
+  font-weight: 700;
 }
 
-.priceRow {
+/* ── Цена ───────────────────────────────── */
+.priceWrap {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
 }
 
 .smallInput {
-  width: 130px;
+  width: 110px;
   padding: 10px 14px;
   border: 1.5px solid var(--gray-200);
   border-radius: 12px;
@@ -69,8 +146,20 @@
   font-size: 14px;
   background: #fff;
   outline: none;
+  transition: border-color var(--transition);
 }
 
+.smallInput:focus {
+  border-color: var(--cherry);
+  box-shadow: 0 0 0 3px rgba(139, 26, 46, 0.08);
+}
+
+.priceDash {
+  color: var(--gray-400);
+  font-weight: 600;
+}
+
+/* ── Загрузка / пусто ───────────────────── */
 .loadingWrap {
   display: flex;
   justify-content: center;
@@ -102,7 +191,7 @@
   font-size: 48px;
 }
 
-/* Список */
+/* ── Список товаров ─────────────────────── */
 .list {
   display: flex;
   flex-direction: column;
@@ -200,7 +289,17 @@
   color: var(--gray-400);
 }
 
+/* ── Адаптив ────────────────────────────── */
 @media (max-width: 900px) {
+  .filterRow {
+    gap: 10px;
+  }
+
+  .dropdown {
+    min-width: 150px;
+    flex: 1;
+  }
+
   .row {
     grid-template-columns: 120px 1fr;
     grid-template-rows: auto auto;
@@ -220,6 +319,23 @@
 }
 
 @media (max-width: 560px) {
+  .filterRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dropdown {
+    min-width: 100%;
+  }
+
+  .priceWrap {
+    justify-content: space-between;
+  }
+
+  .smallInput {
+    flex: 1;
+  }
+
   .row {
     grid-template-columns: 1fr;
   }

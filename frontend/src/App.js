@@ -8,19 +8,18 @@ import HomePage from './pages/Home/HomePage';
 import CatalogPage from './pages/Catalog/CatalogPage';
 import CartPage from './pages/Cart/CartPage';
 import DeliveryPage from './pages/Delivery/DeliveryPage';
+import OrderTrackingPage from './pages/Tracking/OrderTrackingPage';
 import ProfilePage from './pages/Profile/ProfilePage';
 import AdminPage from './pages/Admin/AdminPage';
 import LoginPage from './pages/Auth/LoginPage';
 import RegisterPage from './pages/Auth/RegisterPage';
 import { useAuth } from './context/AuthContext';
 
-// Защищённый маршрут
 function PrivateRoute({ children }) {
   const { user } = useAuth();
   return user ? children : <Navigate to="/login" replace />;
 }
 
-// Маршрут только для администратора
 function AdminRoute({ children }) {
   const { user, isAdmin } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
@@ -51,6 +50,14 @@ function AppRoutes() {
             element={
               <PrivateRoute>
                 <DeliveryPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/tracking"
+            element={
+              <PrivateRoute>
+                <OrderTrackingPage />
               </PrivateRoute>
             }
           />

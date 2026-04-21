@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { adminAPI, categoriesAPI, productsAPI, uploadAPI } from '../../api';
+import { adminAPI, categoriesAPI, productsAPI, uploadAPI, deliveryReviewsAPI } from '../../api';
 import styles from './AdminPage.module.css';
 
 const BASE_URL = process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:8080';
@@ -14,7 +14,7 @@ const EMPTY_PRODUCT = {
 const EMPTY_CATEGORY = { name: '' };
 
 const EMPTY_MODAL = {
-  triggerCategoryId: '', title: '',
+  triggerProductId: '', title: '',
   description: '', productId: '', isActive: true,
 };
 
@@ -36,6 +36,8 @@ export default function AdminPage() {
   const [products, setProducts]     = useState([]);
   const [categories, setCategories] = useState([]);
   const [modals, setModals]         = useState([]);
+  const [deliveryReviews, setDeliveryReviews] = useState([]);
+  const [deliveryStats, setDeliveryStats]     = useState(null);
 
   const [productForm, setProductForm]     = useState(EMPTY_PRODUCT);
   const [categoryForm, setCategoryForm]   = useState(EMPTY_CATEGORY);
@@ -55,10 +57,11 @@ export default function AdminPage() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [pRes, cRes, mRes] = await Promise.all([
-        productsAPI.getAll({ limit: 100 }),  // ← limit: 100 вместо 200
+      const [pRes, cRes, mRes, dRes] = await Promise.all([
+        productsAPI.getAll({ limit: 100 }),
         categoriesAPI.getAdminAll(),
         adminAPI.getAdModals(),
+        deliveryReviewsAPI.getAll(),
       ]);
 
       const p = unwrapArr(pRes.data);
@@ -68,6 +71,8 @@ export default function AdminPage() {
       setProducts(p);
       setCategories(c);
       setModals(m);
+      setDeliveryReviews(dRes.data.reviews || []);
+      setDeliveryStats(dRes.data.stats || null);
 
       setProductForm((prev) =>
         prev.categoryId || c.length === 0
@@ -77,8 +82,8 @@ export default function AdminPage() {
 
       setModalForm((prev) => ({
         ...prev,
-        triggerCategoryId: prev.triggerCategoryId || c[0]?.id || '',
-        productId:         prev.productId         || p[0]?.id || '',
+        triggerProductId: prev.triggerProductId || p[0]?.id || '',
+        productId:        prev.productId        || p[0]?.id || '',
       }));
     } catch (err) {
       console.error('loadAll error:', err);
@@ -89,7 +94,6 @@ export default function AdminPage() {
 
   useEffect(() => { loadAll(); }, []);
 
-  // Загрузка изображения
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -219,18 +223,18 @@ export default function AdminPage() {
 
   const handleModalSubmit = async (e) => {
     e.preventDefault();
-    if (!modalForm.triggerCategoryId || !modalForm.productId) {
-      flash(setModalMsg, 'Ошибка: выберите категорию и товар');
+    if (!modalForm.triggerProductId || !modalForm.productId) {
+      flash(setModalMsg, 'Ошибка: выберите товар-триггер и рекламируемый товар');
       return;
     }
 
     try {
       await adminAPI.createAdModal({
-        triggerCategoryId: modalForm.triggerCategoryId,
-        title:             modalForm.title.trim(),
-        description:       modalForm.description.trim(),
-        productId:         modalForm.productId,
-        isActive:          Boolean(modalForm.isActive),
+        triggerProductId: modalForm.triggerProductId,
+        title:            modalForm.title.trim(),
+        description:      modalForm.description.trim(),
+        productId:        modalForm.productId,
+        isActive:         Boolean(modalForm.isActive),
       });
       setModalForm(EMPTY_MODAL);
       flash(setModalMsg, 'Попап создан ✓');
@@ -263,7 +267,6 @@ export default function AdminPage() {
     <div className={styles.page}>
       <div className="container">
 
-        {/* Header */}
         <div className={styles.adminHeader}>
           <div>
             <h1 className={styles.adminTitle}>👑 Админ-панель</h1>
@@ -285,12 +288,12 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Tabs */}
         <div className={styles.tabs}>
           {[
             { key: 'products',   label: '🛍️ Товары' },
             { key: 'categories', label: '📁 Категории' },
             { key: 'modals',     label: '🎁 Реклама' },
+            { key: 'deliveryReviews', label: '📊 Отзывы о доставке' },
           ].map((t) => (
             <button
               key={t.key}
@@ -303,19 +306,14 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {/* ── ТОВАРЫ ── */}
         {tab === 'products' && (
           <div className={styles.tabContent}>
-
-            {/* Форма */}
             <div className={styles.formCard}>
               <h2 className={styles.formTitle}>
                 {editProductId ? '✏️ Редактировать товар' : '➕ Добавить товар'}
               </h2>
 
               <form className={styles.form} onSubmit={handleProductSubmit}>
-
-                {/* Загрузка фото */}
                 <div className={styles.uploadSection}>
                   <div
                     className={styles.uploadArea}
@@ -362,7 +360,6 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Основные поля */}
                 <div className={styles.formGrid}>
                   <div className={styles.field}>
                     <label className={styles.label}>Название *</label>
@@ -444,7 +441,6 @@ export default function AdminPage() {
                   />
                 </div>
 
-                {/* Флаги */}
                 <div className={styles.flags}>
                   {[
                     { name: 'isNew',      label: '✨ Новинка' },
@@ -494,7 +490,6 @@ export default function AdminPage() {
               </form>
             </div>
 
-            {/* Таблица товаров */}
             <div className={styles.tableWrap}>
               <h2 className={styles.tableTitle}>
                 Все товары ({products.length})
@@ -566,7 +561,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── КАТЕГОРИИ ── */}
         {tab === 'categories' && (
           <div className={styles.tabContent}>
             <div className={styles.formCard}>
@@ -645,7 +639,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── РЕКЛАМА ── */}
         {tab === 'modals' && (
           <div className={styles.tabContent}>
             <div className={styles.formCard}>
@@ -654,22 +647,22 @@ export default function AdminPage() {
               <form className={styles.form} onSubmit={handleModalSubmit}>
                 <div className={styles.formGrid}>
                   <div className={styles.field}>
-                    <label className={styles.label}>Категория-триггер *</label>
+                    <label className={styles.label}>Товар-триггер *</label>
                     <select
-                      name="triggerCategoryId"
+                      name="triggerProductId"
                       className={styles.input}
-                      value={modalForm.triggerCategoryId}
+                      value={modalForm.triggerProductId}
                       onChange={(e) =>
                         setModalForm((p) => ({
                           ...p,
-                          triggerCategoryId: e.target.value,
+                          triggerProductId: e.target.value,
                         }))
                       }
                       required
                     >
-                      <option value="">— Выберите категорию —</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
+                      <option value="">— Выберите товар —</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
                   </div>
@@ -767,8 +760,8 @@ export default function AdminPage() {
                 <div className={styles.table}>
                   <div className={`${styles.tableHead} ${styles.modalHead}`}>
                     <span>Заголовок</span>
-                    <span>Категория</span>
-                    <span>Товар</span>
+                    <span>Триггер</span>
+                    <span>Рекламирует</span>
                     <span>Статус</span>
                     <span>Действия</span>
                   </div>
@@ -783,7 +776,7 @@ export default function AdminPage() {
                       </span>
 
                       <span className={styles.catCell}>
-                        {m.triggerCategory?.name || '—'}
+                        {m.triggerProduct?.name || '—'}
                       </span>
 
                       <span className={styles.catCell}>
@@ -806,6 +799,84 @@ export default function AdminPage() {
                         >
                           🗑️
                         </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {tab === 'deliveryReviews' && (
+          <div className={styles.tabContent}>
+            {deliveryStats && (
+              <div className={styles.statsCard}>
+                <h2 className={styles.statsTitle}>📊 Статистика доставки</h2>
+                <div className={styles.statsRow}>
+                  <div className={styles.statBox}>
+                    <span className={styles.statBig}>{deliveryStats.avg}</span>
+                    <span className={styles.statSmall}>Средний рейтинг / 5</span>
+                  </div>
+                  <div className={styles.statBox}>
+                    <span className={styles.statBig}>{deliveryStats.total}</span>
+                    <span className={styles.statSmall}>Всего отзывов</span>
+                  </div>
+                </div>
+
+                <div className={styles.chart}>
+                  {deliveryStats.distribution.map((d) => {
+                    const pct = deliveryStats.total
+                      ? Math.round((d.count / deliveryStats.total) * 100)
+                      : 0;
+                    return (
+                      <div key={d.rating} className={styles.chartRow}>
+                        <span className={styles.chartLabel}>{d.rating} ★</span>
+                        <div className={styles.chartBarWrap}>
+                          <div
+                            className={styles.chartBar}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className={styles.chartValue}>{d.count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className={styles.tableWrap}>
+              <h2 className={styles.tableTitle}>
+                Все отзывы ({deliveryReviews.length})
+              </h2>
+
+              {deliveryReviews.length === 0 ? (
+                <p className={styles.empty}>Отзывов пока нет</p>
+              ) : (
+                <div className={styles.table}>
+                  <div className={`${styles.tableHead} ${styles.reviewHead}`}>
+                    <span>Заказ</span>
+                    <span>Пользователь</span>
+                    <span>Рейтинг</span>
+                    <span>Комментарий</span>
+                    <span>Дата</span>
+                  </div>
+
+                  {deliveryReviews.map((r) => (
+                    <div key={r.id} className={`${styles.tableRow} ${styles.reviewRow}`}>
+                      <span className={styles.productName}>
+                        #{r.order?.id?.slice(-6).toUpperCase() || '—'}
+                      </span>
+                      <span className={styles.catCell}>{r.user?.email || '—'}</span>
+                      <span className={styles.starCell}>
+                        {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
+                      </span>
+                      <span className={styles.productDesc}>{r.comment}</span>
+                      <span className={styles.dateCell}>
+                        {r.createdAt
+                          ? new Date(r.createdAt).toLocaleDateString('ru-RU')
+                          : '—'}
                       </span>
                     </div>
                   ))}

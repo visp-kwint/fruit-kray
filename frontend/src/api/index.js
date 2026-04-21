@@ -26,13 +26,11 @@ api.interceptors.response.use(
   }
 );
 
-// ── Auth ────────────────────────────────────────────────────
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login:    (data) => api.post('/auth/login', data),
 };
 
-// ── Categories ──────────────────────────────────────────────
 export const categoriesAPI = {
   getAll:     ()     => api.get('/categories'),
   getAdminAll:()     => api.get('/categories'),
@@ -40,15 +38,13 @@ export const categoriesAPI = {
   remove:     (id)   => api.delete(`/categories/${id}`),
 };
 
-// ── Products ────────────────────────────────────────────────
 export const productsAPI = {
   getAll:    (params = {}) => api.get('/products', { params }),
   getById:   (id)          => api.get(`/products/${id}`),
-  getAdModal:(params = {}) =>
-    api.get('/products/admodal/by-category', { params }),
+  getAdModal:(productId)   =>
+    api.get('/products/admodal/by-product', { params: { productId } }),
 };
 
-// ── Upload ──────────────────────────────────────────────────
 export const uploadAPI = {
   image: (file) => {
     const form = new FormData();
@@ -59,21 +55,29 @@ export const uploadAPI = {
   },
 };
 
-// ── Orders ──────────────────────────────────────────────────
 export const ordersAPI = {
   create:      (data) => api.post('/orders', data),
   getAll:      ()     => api.get('/orders'),
   getFrequent: ()     => api.get('/orders/frequent'),
 };
 
-// ── User ────────────────────────────────────────────────────
 export const userAPI = {
   getProfile:    ()     => api.get('/users/profile'),
   updateProfile: (data) => api.put('/users/profile', data),
   getFrequent:   ()     => api.get('/orders/frequent'),
 };
 
-// ── Admin ────────────────────────────────────────────────────
+export const reviewsAPI = {
+  create:      (data) => api.post('/reviews', data),
+  getMy:       ()     => api.get('/reviews/my'),
+  getByProduct:(id)   => api.get(`/reviews/product/${id}`),
+};
+
+export const deliveryReviewsAPI = {
+  create: (data) => api.post('/delivery-reviews', data),
+  getAll: ()     => api.get('/delivery-reviews'),
+};
+
 export const adminAPI = {
   createProduct:  (data)     => api.post('/admin/products', data),
   updateProduct:  (id, data) => api.put(`/admin/products/${id}`, data),

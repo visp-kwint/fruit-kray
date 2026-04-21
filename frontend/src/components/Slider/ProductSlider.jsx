@@ -21,7 +21,7 @@ const SLIDER_SETTINGS = {
   ],
 };
 
-export default function ProductSlider({ title, subtitle, params, featured = false }) {
+export default function ProductSlider({ title, subtitle, params, featured = false, onAddToCart }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -59,7 +59,7 @@ export default function ProductSlider({ title, subtitle, params, featured = fals
           <Slider {...SLIDER_SETTINGS}>
             {products.map((p) => (
               <div key={p.id} className={styles.slide}>
-                <ProductCard product={p} featured={featured && p.is_day_item} />
+                <ProductCard product={p} featured={featured && p.is_day_item} onAddToCart={onAddToCart} />
               </div>
             ))}
           </Slider>

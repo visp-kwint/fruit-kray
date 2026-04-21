@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { YMaps, Map, Placemark, ZoomControl } from '@pbe/react-yandex-maps';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
@@ -7,41 +6,116 @@ import { ordersAPI } from '../../api';
 import styles from './DeliveryPage.module.css';
 
 const API_KEY = process.env.REACT_APP_YANDEX_MAPS_KEY;
-
-// Ростовская область: bbox = "lon1,lat1~lon2,lat2"
 const ROSTOV_BBOX = '37.0,45.7~44.2,51.5';
-const START_CENTER = [47.2357, 39.7015]; // Ростов-на-Дону
+const START_CENTER = [47.2357, 39.7015];
+
+function loadYandexMapsScript() {
+  return new Promise((resolve, reject) => {
+    if (window.ymaps && window.ymaps.Map) {
+      resolve(window.ymaps);
+      return;
+    }
+
+    const existing = document.querySelector('script[src*="api-maps.yandex.ru"]');
+    if (existing) {
+      const check = setInterval(() => {
+        if (window.ymaps && window.ymaps.Map) {
+          clearInterval(check);
+          resolve(window.ymaps);
+        }
+      }, 100);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = `https://api-maps.yandex.ru/2.1/?apikey=${API_KEY}&lang=ru_RU`;
+    script.async = true;
+    script.onload = () => {
+      if (window.ymaps) {
+        window.ymaps.ready(() => resolve(window.ymaps));
+      } else {
+        reject(new Error('ymaps не загрузился'));
+      }
+    };
+    script.onerror = () => reject(new Error('Ошибка загрузки Яндекс Карт'));
+    document.head.appendChild(script);
+  });
+}
 
 export default function DeliveryPage() {
   const { user } = useAuth();
   const { items, totalPrice, clearCart } = useCart();
   const navigate = useNavigate();
 
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const placemarkRef = useRef(null);
+
   const [coords, setCoords] = useState([
-    user?.last_lat || START_CENTER[0],
-    user?.last_lng || START_CENTER[1],
+    user?.lastLat || START_CENTER[0],
+    user?.lastLng || START_CENTER[1],
   ]);
-  const [address, setAddress] = useState(user?.last_address || '');
-  const [query, setQuery] = useState(user?.last_address || '');
+  const [address, setAddress] = useState(user?.lastAddress || '');
+  const [query, setQuery] = useState(user?.lastAddress || '');
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSuggest, setLoadingSuggest] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(null);
   const [error, setError] = useState('');
+  const [mapReady, setMapReady] = useState(false);
 
-  const mapState = useMemo(
-    () => ({
-      center: coords,
-      zoom: 11,
-      controls: ['zoomControl'],
-    }),
-    [coords]
-  );
-
-  // Поиск по адресу в Ростовской области
   useEffect(() => {
-    if (!API_KEY) return;
-    if (!query || query.trim().length < 3) {
+    let destroyed = false;
+
+    loadYandexMapsScript()
+      .then((ymaps) => {
+        if (destroyed || !mapRef.current) return;
+
+        const map = new ymaps.Map(mapRef.current, {
+          center: coords,
+          zoom: 13,
+          controls: ['zoomControl'],
+        });
+
+        map.options.set('suppressMapOpenBlock', true);
+        map.options.set('yandexMapDisablePoiInteractivity', true);
+
+        const placemark = new ymaps.Placemark(coords);
+        map.geoObjects.add(placemark);
+
+        map.events.add('click', (e) => {
+          const nextCoords = e.get('coords');
+          setCoords(nextCoords);
+          placemark.geometry.setCoordinates(nextCoords);
+          reverseGeocode(nextCoords);
+        });
+
+        mapInstance.current = map;
+        placemarkRef.current = placemark;
+        setMapReady(true);
+      })
+      .catch((err) => {
+        console.error('Ошибка карт:', err);
+        setError('Не удалось загрузить карту. Проверьте API-ключ.');
+      });
+
+    return () => {
+      destroyed = true;
+      if (mapInstance.current) {
+        mapInstance.current.destroy();
+        mapInstance.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (mapInstance.current && placemarkRef.current) {
+      mapInstance.current.setCenter(coords, 13);
+      placemarkRef.current.geometry.setCoordinates(coords);
+    }
+  }, [coords]);
+
+  useEffect(() => {
+    if (!API_KEY || !query || query.trim().length < 3) {
       setSuggestions([]);
       return;
     }
@@ -49,7 +123,6 @@ export default function DeliveryPage() {
     const timer = setTimeout(async () => {
       try {
         setLoadingSuggest(true);
-
         const url =
           `https://geocode-maps.yandex.ru/1.x/` +
           `?apikey=${API_KEY}` +
@@ -62,14 +135,11 @@ export default function DeliveryPage() {
 
         const res = await fetch(url);
         const data = await res.json();
-
-        const members =
-          data?.response?.GeoObjectCollection?.featureMember || [];
+        const members = data?.response?.GeoObjectCollection?.featureMember || [];
 
         const parsed = members.map((item) => {
           const obj = item.GeoObject;
           const [lng, lat] = obj.Point.pos.split(' ').map(Number);
-
           return {
             address: obj.metaDataProperty.GeocoderMetaData.text,
             coords: [lat, lng],
@@ -89,7 +159,6 @@ export default function DeliveryPage() {
 
   const reverseGeocode = async ([lat, lng]) => {
     if (!API_KEY) return;
-
     try {
       const url =
         `https://geocode-maps.yandex.ru/1.x/` +
@@ -103,9 +172,7 @@ export default function DeliveryPage() {
 
       const res = await fetch(url);
       const data = await res.json();
-
-      const obj =
-        data?.response?.GeoObjectCollection?.featureMember?.[0]?.GeoObject;
+      const obj = data?.response?.GeoObjectCollection?.featureMember?.[0]?.GeoObject;
 
       if (obj) {
         const text = obj.metaDataProperty.GeocoderMetaData.text;
@@ -126,12 +193,6 @@ export default function DeliveryPage() {
     setQuery(item.address);
     setCoords(item.coords);
     setSuggestions([]);
-  };
-
-  const handleMapClick = (e) => {
-    const nextCoords = e.get('coords');
-    setCoords(nextCoords);
-    reverseGeocode(nextCoords);
   };
 
   const handleSubmit = async (e) => {
@@ -165,56 +226,16 @@ export default function DeliveryPage() {
         deliveryLng: coords[1],
       });
 
-      setSuccess(data);
       clearCart();
+      navigate('/tracking', {
+        state: { order: data.order, deliveryMinutes: data.deliveryMinutes },
+      });
     } catch (err) {
       setError(err.response?.data?.error || 'Ошибка оформления заказа');
     } finally {
       setLoading(false);
     }
   };
-
-  if (success) {
-    return (
-      <div className={styles.successScreen}>
-        <div className={styles.successCard}>
-          <div className={styles.successIcon}>🍒</div>
-          <h2 className={styles.successTitle}>Заказ оформлен!</h2>
-          <p className={styles.successSub}>
-            Ваш заказ #{success.order.id.slice(-6).toUpperCase()} принят
-          </p>
-
-          <div className={styles.deliveryTimer}>
-            <span className={styles.timerIcon}>⏱️</span>
-            <div>
-              <p className={styles.timerLabel}>Ожидаемое время доставки</p>
-              <p className={styles.timerValue}>{success.deliveryMinutes} минут</p>
-            </div>
-          </div>
-
-          <div className={styles.orderInfo}>
-            <div className={styles.orderInfoRow}>
-              <span>Адрес</span>
-              <span>{success.order.deliveryAddress}</span>
-            </div>
-            <div className={styles.orderInfoRow}>
-              <span>Сумма</span>
-              <span>{success.order.total_price?.toLocaleString?.('ru-RU') || success.order.totalPrice?.toLocaleString?.('ru-RU')} ₽</span>
-            </div>
-          </div>
-
-          <div className={styles.successActions}>
-            <button className="btn btn-cherry" onClick={() => navigate('/profile')}>
-              Мои заказы
-            </button>
-            <button className="btn btn-outline" onClick={() => navigate('/catalog')}>
-              Продолжить покупки
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className={styles.page}>
@@ -261,23 +282,21 @@ export default function DeliveryPage() {
             </div>
 
             <div className={styles.mapWrap}>
-              <YMaps query={{ apikey: API_KEY, lang: 'ru_RU' }}>
-                <Map
-                  state={mapState}
-                  width="100%"
-                  height="500px"
-                  onClick={handleMapClick}
-                  options={{
-                    suppressMapOpenBlock: true,
-                    yandexMapDisablePoiInteractivity: true,
-                  }}
-                >
-                  <ZoomControl options={{ float: 'right' }} />
-
-                  {/* Стандартная красная метка, без вишни */}
-                  <Placemark geometry={coords} />
-                </Map>
-              </YMaps>
+              {!mapReady && (
+                <div className={styles.mapLoading}>
+                  <div className={styles.spinner} />
+                  <p>Загружаем карту…</p>
+                </div>
+              )}
+              <div
+                ref={mapRef}
+                style={{
+                  width: '100%',
+                  height: '500px',
+                  borderRadius: '16px',
+                  display: mapReady ? 'block' : 'none',
+                }}
+              />
             </div>
 
             <p className={styles.mapHint}>
@@ -287,17 +306,6 @@ export default function DeliveryPage() {
 
           <form className={styles.form} onSubmit={handleSubmit}>
             <h2 className={styles.formTitle}>Детали доставки</h2>
-
-            <div className={styles.coordsRow}>
-              <div className={styles.field}>
-                <label className={styles.label}>Широта</label>
-                <input className={styles.input} value={coords[0].toFixed(5)} readOnly />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Долгота</label>
-                <input className={styles.input} value={coords[1].toFixed(5)} readOnly />
-              </div>
-            </div>
 
             <div className={styles.orderSummary}>
               <h3 className={styles.summaryHead}>Ваш заказ</h3>

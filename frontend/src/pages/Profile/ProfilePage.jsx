@@ -1,28 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { userAPI, ordersAPI } from '../../api';
+import { userAPI, ordersAPI, reviewsAPI } from '../../api';
+import ReviewModal from '../../components/ReviewModal/ReviewModal';
 import styles from './ProfilePage.module.css';
+import { useNavigate } from 'react-router-dom';
 
 export default function ProfilePage() {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [orders, setOrders]   = useState([]);
   const [frequent, setFrequent] = useState([]);
+  const [myReviews, setMyReviews] = useState([]);
   const [tab, setTab]         = useState('orders');
   const [email, setEmail]     = useState('');
   const [password, setPassword] = useState('');
   const [saveMsg, setSaveMsg] = useState('');
   const [loading, setLoading] = useState(true);
 
+  const [reviewModal, setReviewModal] = useState(null);
+
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [{ data: prof }, { data: ord }, { data: freq }] = await Promise.all([
+        const [{ data: prof }, { data: ord }, { data: freq }, { data: rev }] = await Promise.all([
           userAPI.getProfile(),
           ordersAPI.getAll(),
           userAPI.getFrequent(),
+          reviewsAPI.getMy(),
         ]);
         setProfile(prof);
         setOrders(ord.orders || []);
         setFrequent(freq.frequent_products || []);
+        setMyReviews(rev.reviews || []);
         setEmail(prof.email);
       } catch {
         // обработка ошибок
@@ -49,6 +57,14 @@ export default function ProfilePage() {
     }
   };
 
+  const hasReview = (orderId, productId) =>
+    myReviews.some((r) => r.orderId === orderId && r.productId === productId);
+
+  const handleReviewSuccess = async () => {
+    const { data } = await reviewsAPI.getMy();
+    setMyReviews(data.reviews || []);
+  };
+
   if (loading) {
     return (
       <div className={styles.loadingWrap}>
@@ -68,7 +84,7 @@ export default function ProfilePage() {
           <div>
             <h1 className={styles.profileName}>{profile?.email}</h1>
             <p className={styles.profileRole}>
-              {profile?.role === 'admin' ? '👑 Администратор' : '🛒 Покупатель'}
+              {profile?.role === 'ADMIN' ? '👑 Администратор' : '🛒 Покупатель'}
             </p>
           </div>
         </div>
@@ -78,6 +94,7 @@ export default function ProfilePage() {
           {[
             { key: 'orders',   label: '📦 История заказов' },
             { key: 'frequent', label: '⭐ Часто покупаю' },
+            { key: 'reviews',  label: '💬 Мои отзывы' },
             { key: 'settings', label: '⚙️ Настройки' },
           ].map((t) => (
             <button
@@ -104,35 +121,71 @@ export default function ProfilePage() {
                         Заказ #{order.id.slice(-6).toUpperCase()}
                       </p>
                       <p className={styles.orderDate}>
-                        {new Date(order.created_at).toLocaleDateString('ru-RU', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        {order.createdAt
+                          ? new Date(order.createdAt).toLocaleDateString('ru-RU', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : '—'}
                       </p>
                     </div>
                     <div className={styles.orderRight}>
-                      <span className={`${styles.statusBadge} ${styles[order.status]}`}>
+                      <span className={`${styles.statusBadge} ${styles[order.status?.toLowerCase()]}`}>
                         {statusLabel(order.status)}
                       </span>
                       <p className={styles.orderTotal}>
-                        {order.total_price.toLocaleString('ru-RU')} ₽
+                        {(order.totalPrice ?? 0).toLocaleString('ru-RU')} ₽
                       </p>
+                      {/* КНОПКА ОТСЛЕЖИВАНИЯ */}
+                      {order.status !== 'DONE' && order.status !== 'CANCELLED' && (
+                        <button
+                          className={styles.trackBtn}
+                          onClick={() => navigate('/tracking', {
+                            state: { order, deliveryMinutes: order.deliveryMinutes || 30 }
+                          })}
+                        >
+                          🚚 Отследить
+                        </button>
+                      )}
+                      {order.status === 'DONE' && (
+                        <button
+                          className={styles.trackBtn}
+                          onClick={() => navigate('/tracking', {
+                            state: { order, deliveryMinutes: order.deliveryMinutes || 30 }
+                          })}
+                        >
+                          📦 Подробности
+                        </button>
+                      )}
                     </div>
                   </div>
 
                   <div className={styles.orderItems}>
-                    {order.items.map((item, i) => (
-                      <span key={i} className={styles.orderItem}>
-                        {item.name} × {item.quantity}
-                      </span>
+                    {order.items?.map((item, i) => (
+                      <div key={i} className={styles.orderItemRow}>
+                        <span className={styles.orderItem}>
+                          {item.name} × {item.quantity}
+                        </span>
+                        {order.status === 'DONE' && !hasReview(order.id, item.productId) && (
+                          <button
+                            className={styles.reviewBtn}
+                            onClick={() => setReviewModal({ product: item, order })}
+                          >
+                            Оставить отзыв
+                          </button>
+                        )}
+                        {order.status === 'DONE' && hasReview(order.id, item.productId) && (
+                          <span className={styles.reviewDone}>✓ Оценено</span>
+                        )}
+                      </div>
                     ))}
                   </div>
 
                   <p className={styles.orderAddress}>
-                    📍 {order.delivery_address}
+                    📍 {order.deliveryAddress || '—'}
                   </p>
                 </div>
               ))
@@ -154,7 +207,7 @@ export default function ProfilePage() {
                     <div className={styles.frequentRank}>#{i + 1}</div>
                     <img
                       src={
-                        item.product_details?.image_url ||
+                        item.imageUrl ||
                         `https://picsum.photos/seed/${item.name}/80/80`
                       }
                       alt={item.name}
@@ -163,10 +216,49 @@ export default function ProfilePage() {
                     <div className={styles.frequentInfo}>
                       <p className={styles.frequentName}>{item.name}</p>
                       <p className={styles.frequentQty}>
-                        Куплено: <strong>{item.total_qty}</strong> шт.
+                        Куплено: <strong>{item.totalQty ?? item.total_qty ?? 0}</strong> шт.
                       </p>
-                      <p className={styles.frequentPrice}>{item.last_price} ₽</p>
+                      <p className={styles.frequentPrice}>
+                        {(item.price ?? item.last_price ?? 0).toLocaleString('ru-RU')} ₽
+                      </p>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Мои отзывы */}
+        {tab === 'reviews' && (
+          <div className={styles.tabContent}>
+            {myReviews.length === 0 ? (
+              <p className={styles.emptyTab}>Вы ещё не оставили ни одного отзыва 💬</p>
+            ) : (
+              <div className={styles.reviewsList}>
+                {myReviews.map((review) => (
+                  <div key={review.id} className={styles.reviewCard}>
+                    <div className={styles.reviewHeader}>
+                      <img
+                        src={review.product?.imageUrl || `https://picsum.photos/seed/${review.product?.name}/60/60`}
+                        alt={review.product?.name}
+                        className={styles.reviewProductImg}
+                      />
+                      <div className={styles.reviewMeta}>
+                        <p className={styles.reviewProductName}>{review.product?.name}</p>
+                        <div className={styles.reviewStars}>
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <span key={i} className={i < review.rating ? styles.starFilled : styles.starEmpty}>★</span>
+                          ))}
+                        </div>
+                        <p className={styles.reviewDate}>
+                          {review.createdAt
+                            ? new Date(review.createdAt).toLocaleDateString('ru-RU')
+                            : '—'}
+                        </p>
+                      </div>
+                    </div>
+                    <p className={styles.reviewComment}>{review.comment}</p>
                   </div>
                 ))}
               </div>
@@ -214,17 +306,26 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {reviewModal && (
+        <ReviewModal
+          product={reviewModal.product}
+          order={reviewModal.order}
+          onClose={() => setReviewModal(null)}
+          onSuccess={handleReviewSuccess}
+        />
+      )}
     </div>
   );
 }
 
 function statusLabel(status) {
   const labels = {
-    pending:    'Ожидает',
-    processing: 'Обработка',
-    delivering: 'Доставляется',
-    done:       'Выполнен',
-    cancelled:  'Отменён',
+    PENDING:    'Ожидает',
+    PROCESSING: 'Обработка',
+    DELIVERING: 'Доставляется',
+    DONE:       'Выполнен',
+    CANCELLED:  'Отменён',
   };
   return labels[status] || status;
 }

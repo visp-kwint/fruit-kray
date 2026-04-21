@@ -133,8 +133,15 @@
   color: var(--cherry);
 }
 
-.addBtn {
-  flex-shrink: 0;
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.addBtn,
+.detailsBtn {
+  flex: 1;
 }
 
 .dismiss {

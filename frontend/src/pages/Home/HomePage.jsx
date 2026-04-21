@@ -1,38 +1,36 @@
 import React, { useState } from 'react';
 import Hero from '../../components/Hero/Hero';
 import ProductSlider from '../../components/Slider/ProductSlider';
+import ProductDetailsModal from '../../components/ProductDetailsModal/ProductDetailsModal';
 import AdModal from '../../components/AdModal/AdModal';
-import { useCart } from '../../context/CartContext';
 import styles from './HomePage.module.css';
 
 export default function HomePage() {
-  const { items } = useCart();
-  const [adCategory, setAdCategory] = useState(null);
+  const [adModalProductId, setAdModalProductId] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
-  // Слушаем изменения корзины для показа рекламного попапа
-  const lastItem = items[items.length - 1];
-  const currentCategory = lastItem?.category;
-
-  const handleAdClose = () => setAdCategory(null);
+  const handleAddToCart = (product) => {
+    setAdModalProductId(product.id);
+  };
 
   return (
     <div className={styles.page}>
-      {/* Hero блок */}
       <Hero />
 
-      {/* Витрина */}
       <section className={`section ${styles.showcase}`}>
         <div className="container">
           <ProductSlider
             title="Популярные десерты"
             subtitle="Самое любимое у наших покупателей"
             params={{ is_popular: true, category: 'desserts', limit: 8 }}
+            onAddToCart={handleAddToCart}
           />
 
           <ProductSlider
             title="Новинки недели"
             subtitle="Только что появились в нашем ассортименте"
             params={{ is_new: true, limit: 8 }}
+            onAddToCart={handleAddToCart}
           />
 
           <ProductSlider
@@ -40,17 +38,22 @@ export default function HomePage() {
             subtitle="Специальное предложение — только сегодня"
             params={{ is_day_item: true, limit: 6 }}
             featured={true}
+            onAddToCart={handleAddToCart}
           />
         </div>
       </section>
 
-      {/* Рекламный попап при добавлении в корзину */}
-      {currentCategory && adCategory !== null && (
-        <AdModal
-          triggerCategory={adCategory}
-          onClose={handleAdClose}
-        />
-      )}
+      <ProductDetailsModal
+        product={selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+        onAddToCart={handleAddToCart}
+      />
+
+      <AdModal
+        triggerProductId={adModalProductId}
+        onClose={() => setAdModalProductId(null)}
+        onOpenProductDetails={setSelectedProduct}
+      />
     </div>
   );
 }
