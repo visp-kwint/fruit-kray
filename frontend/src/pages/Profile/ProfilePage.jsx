@@ -125,10 +125,14 @@ export default function ProfilePage() {
     try {
       const { data } = await deliveryReviewsAPI.getMy();
       setMyDeliveryReviews(data.reviews || []);
+      
+      const ordersRes = await ordersAPI.getAll();
+      setOrders(ordersRes.data?.orders || []);
     } catch (err) {
       console.error('Ошибка обновления отзывов на доставку:', err);
     }
   };
+
 
   const handleDeliveryReviewSubmit = async (e) => {
     e.preventDefault();

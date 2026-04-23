@@ -20,6 +20,23 @@ const CreateOrderSchema = z.object({
   deliveryLng:     z.number().default(0),
 });
 
+// ── Границы Ростовской области (приблизительные) ─────────────────
+const ROSTOV_BOUNDS = {
+  minLat: 45.85,
+  maxLat: 50.35,
+  minLng: 38.05,
+  maxLng: 43.35,
+};
+
+function isInRostovOblast(lat: number, lng: number): boolean {
+  return (
+    lat >= ROSTOV_BOUNDS.minLat &&
+    lat <= ROSTOV_BOUNDS.maxLat &&
+    lng >= ROSTOV_BOUNDS.minLng &&
+    lng <= ROSTOV_BOUNDS.maxLng
+  );
+}
+
 router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   const parsed = CreateOrderSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -29,6 +46,14 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
 
   const { items, deliveryAddress, deliveryLat, deliveryLng } = parsed.data;
   const userId = req.user!.userId;
+
+  // ── Проверка: только Ростовская область ─────────────────────────
+  if (!isInRostovOblast(deliveryLat, deliveryLng)) {
+    res.status(400).json({
+      error: 'Доставка возможна только в пределах Ростовской области',
+    });
+    return;
+  }
 
   // ── Проверяем, что все товары из корзины ещё существуют в БД ──
   const productIds = items.map((i) => i.productId);

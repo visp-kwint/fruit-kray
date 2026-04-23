@@ -41,13 +41,20 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const review = await prisma.deliveryReview.create({
-    data: { orderId, userId, rating, comment },
-    include: {
-      user:  { select: { email: true } },
-      order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true } },
-    },
-  });
+  // Создаём отзыв и меняем статус заказа на DONE
+  const [review] = await prisma.$transaction([
+    prisma.deliveryReview.create({
+      data: { orderId, userId, rating, comment },
+      include: {
+        user:  { select: { name: true, email: true } },
+        order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true } },
+      },
+    }),
+    prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'DONE' },
+    }),
+  ]);
 
   res.status(201).json(review);
 });
@@ -57,7 +64,7 @@ router.get('/my', requireAuth, async (req: AuthRequest, res: Response) => {
   const reviews = await prisma.deliveryReview.findMany({
     where: { userId: req.user!.userId },
     include: {
-      order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true } },
+      order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true, status: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -68,7 +75,7 @@ router.get('/my', requireAuth, async (req: AuthRequest, res: Response) => {
 router.get('/', requireAuth, requireAdmin, async (_req: AuthRequest, res: Response) => {
   const reviews = await prisma.deliveryReview.findMany({
     include: {
-      user:  { select: { email: true } },
+      user:  { select: { name: true, email: true } },
       order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true } },
     },
     orderBy: { createdAt: 'desc' },

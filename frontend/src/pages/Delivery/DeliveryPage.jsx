@@ -7,6 +7,24 @@ import styles from './DeliveryPage.module.css';
 
 const API_KEY = process.env.REACT_APP_YANDEX_MAPS_KEY;
 const ROSTOV_BBOX = '37.0,45.7~44.2,51.5';
+
+// ── Границы Ростовской области ───────────────────────────────────
+const ROSTOV_BOUNDS = {
+  minLat: 45.85,
+  maxLat: 50.35,
+  minLng: 38.05,
+  maxLng: 43.35,
+};
+
+function isInRostovOblast(lat, lng) {
+  return (
+    lat >= ROSTOV_BOUNDS.minLat &&
+    lat <= ROSTOV_BOUNDS.maxLat &&
+    lng >= ROSTOV_BOUNDS.minLng &&
+    lng <= ROSTOV_BOUNDS.maxLng
+  );
+}
+
 const START_CENTER = [47.2357, 39.7015];
 
 function loadYandexMapsScript() {
@@ -58,7 +76,6 @@ export default function DeliveryPage() {
   const [error, setError] = useState('');
   const [mapReady, setMapReady] = useState(false);
 
-  // При монтировании: загружаем свежий профиль и подтягиваем последний адрес
   useEffect(() => {
     let mounted = true;
 
@@ -86,7 +103,6 @@ export default function DeliveryPage() {
     };
   }, [refreshUser]);
 
-  // Карта
   useEffect(() => {
     let destroyed = false;
 
@@ -99,6 +115,12 @@ export default function DeliveryPage() {
           zoom: 13,
           controls: ['zoomControl'],
         });
+
+        // Ограничиваем область просмотра Ростовской областью
+        map.options.set('restrictMapArea', [
+          [ROSTOV_BOUNDS.minLat, ROSTOV_BOUNDS.minLng],
+          [ROSTOV_BOUNDS.maxLat, ROSTOV_BOUNDS.maxLng],
+        ]);
 
         map.options.set('suppressMapOpenBlock', true);
         map.options.set('yandexMapDisablePoiInteractivity', true);
@@ -131,7 +153,6 @@ export default function DeliveryPage() {
     };
   }, []);
 
-  // Синхронизация координат с картой
   useEffect(() => {
     if (mapInstance.current && placemarkRef.current) {
       mapInstance.current.setCenter(coords, 13);
@@ -139,7 +160,6 @@ export default function DeliveryPage() {
     }
   }, [coords]);
 
-  // Подсказки адресов
   useEffect(() => {
     if (!API_KEY || !query || query.trim().length < 3) {
       setSuggestions([]);
@@ -234,6 +254,12 @@ export default function DeliveryPage() {
       return;
     }
 
+    // ── Проверка: только Ростовская область ───────────────────────
+    if (!isInRostovOblast(coords[0], coords[1])) {
+      setError('Доставка возможна только в пределах Ростовской области. Выберите адрес на карте внутри региона.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -270,7 +296,7 @@ export default function DeliveryPage() {
           Оформление заказа
         </h1>
         <p className="section-subtitle">
-          Выберите точку доставки на карте или введите адрес вручную
+          Выберите точку доставки на карте или введите адрес вручную (только Ростовская область)
         </p>
 
         <div className={styles.layout}>
@@ -326,7 +352,7 @@ export default function DeliveryPage() {
             </div>
 
             <p className={styles.mapHint}>
-              Нажмите на карту, чтобы выбрать точку доставки
+              Нажмите на карту, чтобы выбрать точку доставки (только Ростовская область)
             </p>
           </div>
 

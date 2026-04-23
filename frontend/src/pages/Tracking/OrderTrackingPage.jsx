@@ -21,9 +21,23 @@ export default function OrderTrackingPage() {
   const [reviewSent, setReviewSent] = useState(false);
   const [hasDeliveryReview, setHasDeliveryReview] = useState(false);
 
-  // Загрузка заказа, если пришли без state (F5 / прямой заход)
   useEffect(() => {
-    if (state.order) return;
+    if (state.order) {
+      const refreshOrder = async () => {
+        try {
+          const { data } = await ordersAPI.getAll();
+          const orders = data.orders || [];
+          const actualOrder = orders.find(o => o.id === state.order.id);
+          if (actualOrder) {
+            setOrder(actualOrder);
+            setDeliveryMinutes(actualOrder.deliveryMinutes || 30);
+          }
+        } catch {
+        }
+      };
+      refreshOrder();
+      return;
+    }
 
     const load = async () => {
       try {

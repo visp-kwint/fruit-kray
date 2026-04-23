@@ -412,17 +412,17 @@ async function main() {
     },
   });
 
-  console.log('✅ Админ:', admin.email);
-  console.log('✅ Пользователь:', user.email);
-  console.log('✅ Категорий:', 4);
-  console.log('✅ Товаров:', 12);
-  console.log('✅ Попапов:', 3);
-  console.log('✅ Заказов:', 7, '(6 выполнено — можно оставить отзывы, 1 в обработке)');
+  console.log('Админ:', admin.email);
+  console.log('Пользователь:', user.email);
+  console.log('Категорий:', 4);
+  console.log('Товаров:', 12);
+  console.log('Попапов:', 3);
+  console.log('Заказов:', 7, '(6 выполнено — можно оставить отзывы, 1 в обработке)');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seed error:', e);
+    console.error('Seed error:', e);
     process.exit(1);
   })
   .finally(async () => {

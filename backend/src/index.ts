@@ -39,7 +39,7 @@ app.use('/api/delivery-reviews', deliveryReviewsRouter);
 app.use('/api/cart',             cartRouter);
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: '🍒 Фрукт Край API' });
+  res.json({ status: 'ok', service: 'Фрукт Край API' });
 });
 
 app.use((_req, res) => {
@@ -53,7 +53,7 @@ app.use(
     res: express.Response,
     _next: express.NextFunction
   ) => {
-    console.error('❌ Unhandled error:', err.message);
+    console.error('Unhandled error:', err.message);
     res.status(500).json({ error: err.message || 'Внутренняя ошибка сервера' });
   }
 );
@@ -61,15 +61,15 @@ app.use(
 async function start() {
   try {
     await prisma.$connect();
-    console.log('✅ Prisma подключена к БД');
-    console.log('📁 DATABASE_URL =', process.env.DATABASE_URL);
+    console.log('Prisma подключена к БД');
+    console.log('DATABASE_URL =', process.env.DATABASE_URL);
 
     app.listen(PORT, () => {
-      console.log(`\n🍒 Фрукт Край API запущен`);
-      console.log(`   http://localhost:${PORT}\n`);
+      console.log(`\nФрукт Край API запущен`);
+      console.log(`http://localhost:${PORT}\n`);
     });
   } catch (err) {
-    console.error('❌ Ошибка запуска:', err);
+    console.error('Ошибка запуска:', err);
     process.exit(1);
   }
 }
