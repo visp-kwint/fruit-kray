@@ -76,6 +76,14 @@ export const reviewsAPI = {
 export const deliveryReviewsAPI = {
   create: (data) => api.post('/delivery-reviews', data),
   getAll: ()     => api.get('/delivery-reviews'),
+  getMy:  ()     => api.get('/delivery-reviews/my'),
+};
+
+export const cartAPI = {
+  getAll: ()              => api.get('/cart'),
+  sync:   (items)         => api.put('/cart', { items }),
+  remove: (productId)     => api.delete(`/cart/${productId}`),
+  clear:  ()              => api.delete('/cart'),
 };
 
 export const adminAPI = {

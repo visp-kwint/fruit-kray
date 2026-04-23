@@ -26,6 +26,13 @@ api.interceptors.response.use(
   },
 );
 
+// отзывы
+export const deliveryReviewsAPI = {
+  create: (data) => api.post('/delivery-reviews', data),
+  getAll: ()     => api.get('/delivery-reviews'),
+  getMy:  ()     => api.get('/delivery-reviews/my'),
+};
+
 // ── Товары ───────────────────────────────────────────────────────
 export const productsAPI = {
   getAll:       (params) => api.get('/products', { params }),

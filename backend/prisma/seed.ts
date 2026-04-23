@@ -27,6 +27,8 @@ async function main() {
   console.log('🌱 Сидирование базы данных...');
 
   await prisma.adModal.deleteMany();
+  await prisma.deliveryReview.deleteMany();
+  await prisma.review.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.product.deleteMany();
@@ -39,6 +41,7 @@ async function main() {
   const admin = await prisma.user.create({
     data: {
       email: 'admin@frukt-kray.ru',
+      name: 'Администратор',
       passwordHash: adminHash,
       role: 'ADMIN',
     },
@@ -47,25 +50,18 @@ async function main() {
   const user = await prisma.user.create({
     data: {
       email: 'user@frukt-kray.ru',
+      name: 'Иван Петров',
       passwordHash: userHash,
       role: 'USER',
     },
   });
 
-  const categoriesData = [
-    'Фрукты',
-    'Овощи',
-    'Десерты',
-    'Ягоды',
-  ];
+  const categoriesData = ['Фрукты', 'Овощи', 'Десерты', 'Ягоды'];
 
-  const categories = {};
+  const categories: Record<string, any> = {};
   for (const name of categoriesData) {
     const cat = await prisma.category.create({
-      data: {
-        name,
-        slug: slugify(name),
-      },
+      data: { name, slug: slugify(name) },
     });
     categories[name] = cat;
   }
@@ -75,6 +71,7 @@ async function main() {
   const desserts = categories['Десерты'];
   const berries = categories['Ягоды'];
 
+  // ── ТОВАРЫ ───────────────────────────────────────────────────────
   const strawberry = await prisma.product.create({
     data: {
       name: 'Клубника садовая',
@@ -246,25 +243,26 @@ async function main() {
     },
   });
 
+  // ── РЕКЛАМНЫЕ ПОПАПЫ ────────────────────────────────────────────
   await prisma.adModal.createMany({
     data: [
       {
-        triggerCategoryId: fruits.id,
-        title: 'К фруктам — десерт в подарок? 🍰',
+        triggerProductId: apples.id,
+        title: 'К фруктам — десерт в подарок?',
         description: 'Отлично сочетается с вашей покупкой!',
         productId: cherryCake.id,
         isActive: true,
       },
       {
-        triggerCategoryId: vegetables.id,
-        title: 'Дополните ужин десертом! 🍒',
+        triggerProductId: tomatoes.id,
+        title: 'Дополните ужин десертом!',
         description: 'Сладкое завершение овощного блюда.',
         productId: strawberryTart.id,
         isActive: true,
       },
       {
-        triggerCategoryId: desserts.id,
-        title: 'К десерту — свежие ягоды! 🍒',
+        triggerProductId: cherryCake.id,
+        title: 'К десерту — свежие ягоды!',
         description: 'Вишня прекрасно дополнит ваш десерт.',
         productId: cherry.id,
         isActive: true,
@@ -272,7 +270,12 @@ async function main() {
     ],
   });
 
-  await prisma.order.create({
+  // ═══════════════════════════════════════════════════════════════
+  // ЗАКАЗЫ для тестирования отзывов (все DONE, кроме одного PENDING)
+  // ═══════════════════════════════════════════════════════════════
+
+  // Заказ 1: DONE — ягоды + десерт
+  const order1 = await prisma.order.create({
     data: {
       userId: user.id,
       totalPrice: 1450,
@@ -283,18 +286,127 @@ async function main() {
       deliveryMinutes: 27,
       items: {
         create: [
-          {
-            productId: cherry.id,
-            name: cherry.name,
-            price: cherry.price,
-            quantity: 2,
-          },
-          {
-            productId: cherryCake.id,
-            name: cherryCake.name,
-            price: cherryCake.price,
-            quantity: 1,
-          },
+          { productId: cherry.id, name: cherry.name, price: cherry.price, quantity: 2 },
+          { productId: cherryCake.id, name: cherryCake.name, price: cherryCake.price, quantity: 1 },
+        ],
+      },
+    },
+  });
+
+  // Заказ 2: DONE — фрукты + десерт
+  const order2 = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalPrice: 890,
+      status: 'DONE',
+      deliveryAddress: 'Россия, Ростовская область, Таганрог, Петровская улица, 109А',
+      deliveryLat: 47.2096,
+      deliveryLng: 38.9352,
+      deliveryMinutes: 45,
+      items: {
+        create: [
+          { productId: apples.id, name: apples.name, price: apples.price, quantity: 3 },
+          { productId: strawberryTart.id, name: strawberryTart.name, price: strawberryTart.price, quantity: 1 },
+        ],
+      },
+    },
+  });
+
+  // Заказ 3: DONE — только десерт
+  const order3 = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalPrice: 260,
+      status: 'DONE',
+      deliveryAddress: 'Россия, Ростовская область, Таганрог, Петровская улица, 109А',
+      deliveryLat: 47.2096,
+      deliveryLng: 38.9352,
+      deliveryMinutes: 15,
+      items: {
+        create: [
+          { productId: strudel.id, name: strudel.name, price: strudel.price, quantity: 1 },
+        ],
+      },
+    },
+  });
+
+  // Заказ 4: DONE — овощи (можно оставить отзыв на томаты, огурцы, баклажаны, кабачок)
+  const order4 = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalPrice: 490,
+      status: 'DONE',
+      deliveryAddress: 'г. Ростов-на-Дону, ул. Пушкинская, 15',
+      deliveryLat: 47.2225,
+      deliveryLng: 39.7187,
+      deliveryMinutes: 35,
+      items: {
+        create: [
+          { productId: tomatoes.id, name: tomatoes.name, price: tomatoes.price, quantity: 1 },
+          { productId: cucumbers.id, name: cucumbers.name, price: cucumbers.price, quantity: 1 },
+          { productId: eggplants.id, name: eggplants.name, price: eggplants.price, quantity: 1 },
+          { productId: zucchini.id, name: zucchini.name, price: zucchini.price, quantity: 1 },
+        ],
+      },
+    },
+  });
+
+  // Заказ 5: DONE — фрукты + ягоды (персики + клубника)
+  const order5 = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalPrice: 770,
+      status: 'DONE',
+      deliveryAddress: 'г. Ростов-на-Дону, пр. Ворошиловский, 62',
+      deliveryLat: 47.2362,
+      deliveryLng: 39.7120,
+      deliveryMinutes: 22,
+      items: {
+        create: [
+          { productId: peaches.id, name: peaches.name, price: peaches.price, quantity: 1 },
+          { productId: strawberry.id, name: strawberry.name, price: strawberry.price, quantity: 1 },
+        ],
+      },
+    },
+  });
+
+  // Заказ 6: DONE — десерты (панна-котта + штрудель)
+  const order6 = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalPrice: 580,
+      status: 'DONE',
+      deliveryAddress: 'г. Таганрог, ул. Чехова, 22',
+      deliveryLat: 47.2105,
+      deliveryLng: 38.9178,
+      deliveryMinutes: 50,
+      items: {
+        create: [
+          { productId: pannaCotta.id, name: pannaCotta.name, price: pannaCotta.price, quantity: 1 },
+          { productId: strudel.id, name: strudel.name, price: strudel.price, quantity: 1 },
+        ],
+      },
+    },
+  });
+
+  // Заказ 7: PENDING — в процессе (отзыв оставить нельзя)
+  const order7 = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalPrice: 3360,
+      status: 'PENDING',
+      deliveryAddress: 'Россия, Ростовская область, Таганрог, Петровская улица, 109А',
+      deliveryLat: 47.2096,
+      deliveryLng: 38.9352,
+      deliveryMinutes: 30,
+      items: {
+        create: [
+          { productId: cherry.id, name: cherry.name, price: cherry.price, quantity: 1 },
+          { productId: apples.id, name: apples.name, price: apples.price, quantity: 2 },
+          { productId: cherryCake.id, name: cherryCake.name, price: cherryCake.price, quantity: 2 },
+          { productId: strawberryTart.id, name: strawberryTart.name, price: strawberryTart.price, quantity: 1 },
+          { productId: pannaCotta.id, name: pannaCotta.name, price: pannaCotta.price, quantity: 1 },
+          { productId: strudel.id, name: strudel.name, price: strudel.price, quantity: 1 },
         ],
       },
     },
@@ -305,7 +417,7 @@ async function main() {
   console.log('✅ Категорий:', 4);
   console.log('✅ Товаров:', 12);
   console.log('✅ Попапов:', 3);
-  console.log('✅ Тестовый заказ создан');
+  console.log('✅ Заказов:', 7, '(6 выполнено — можно оставить отзывы, 1 в обработке)');
 }
 
 main()

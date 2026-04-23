@@ -15,8 +15,8 @@ function resolveImage(url) {
 
 const SORT_OPTIONS = [
   { value: 'default', label: 'По умолчанию' },
-  { value: 'popular', label: '🔥 Популярные' },
-  { value: 'new', label: '✨ Новинки' },
+  { value: 'popular', label: 'Популярные' },
+  { value: 'new', label: 'Новинки' },
   { value: 'cheap', label: 'Сначала дешевле' },
   { value: 'expensive', label: 'Сначала дороже' },
 ];
@@ -103,7 +103,7 @@ export default function CatalogPage() {
         <div className={styles.filters}>
           <input
             className={styles.input}
-            placeholder="🔍 Поиск..."
+            placeholder="Поиск..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -194,7 +194,7 @@ export default function CatalogPage() {
           </div>
         ) : products.length === 0 ? (
           <div className={styles.emptyWrap}>
-            <span>🥕</span>
+            <span></span>
             <p>Товары не найдены</p>
           </div>
         ) : (

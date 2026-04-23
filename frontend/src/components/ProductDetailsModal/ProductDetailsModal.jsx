@@ -46,6 +46,16 @@ export default function ProductDetailsModal({ product, onClose, onAddToCart }) {
     ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
     : null;
 
+  // Функция для отображения имени пользователя
+  const getUserDisplayName = (review) => {
+    if (review.user?.name && review.user.name.trim()) {
+      return review.user.name;
+    }
+    // Если имя не задано, показываем часть email до @
+    const email = review.user?.email || 'Пользователь';
+    return email.split('@')[0];
+  };
+
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -110,7 +120,9 @@ export default function ProductDetailsModal({ product, onClose, onAddToCart }) {
                 {reviews.map((r) => (
                   <div key={r.id} className={styles.reviewItem}>
                     <div className={styles.reviewTop}>
-                      <span className={styles.reviewAuthor}>{r.user?.email?.split('@')[0] || 'Пользователь'}</span>
+                      <span className={styles.reviewAuthor}>
+                        {getUserDisplayName(r)}
+                      </span>
                       <span className={styles.reviewItemStars}>
                         {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
                       </span>

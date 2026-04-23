@@ -31,6 +31,7 @@ function unwrapArr(data) {
 
 export default function AdminPage() {
   const [tab, setTab]           = useState('products');
+  const [tabsOpen, setTabsOpen] = useState(false);
   const [loading, setLoading]   = useState(true);
 
   const [products, setProducts]     = useState([]);
@@ -94,6 +95,10 @@ export default function AdminPage() {
 
   useEffect(() => { loadAll(); }, []);
 
+  useEffect(() => {
+    setTabsOpen(false);
+  }, [tab]);
+
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -105,7 +110,7 @@ export default function AdminPage() {
       const { data } = await uploadAPI.image(file);
       const fullUrl = `${BASE_URL}${data.url}`;
       setProductForm((prev) => ({ ...prev, imageUrl: fullUrl }));
-      flash(setProductMsg, 'Изображение загружено ✓');
+      flash(setProductMsg, 'Изображение загружено');
     } catch (err) {
       flash(setProductMsg, 'Ошибка загрузки изображения');
       console.error(err);
@@ -147,10 +152,10 @@ export default function AdminPage() {
     try {
       if (editProductId) {
         await adminAPI.updateProduct(editProductId, payload);
-        flash(setProductMsg, 'Товар обновлён ✓');
+        flash(setProductMsg, 'Товар обновлен');
       } else {
         await adminAPI.createProduct(payload);
-        flash(setProductMsg, 'Товар добавлен ✓');
+        flash(setProductMsg, 'Товар добавлен');
       }
       setProductForm(EMPTY_PRODUCT);
       setEditProductId(null);
@@ -188,7 +193,7 @@ export default function AdminPage() {
     if (!window.confirm('Удалить товар?')) return;
     try {
       await adminAPI.deleteProduct(id);
-      flash(setProductMsg, 'Товар удалён');
+      flash(setProductMsg, 'Товар удален');
       await loadAll();
     } catch (err) {
       flash(setProductMsg, `Ошибка: ${err.response?.data?.error || err.message}`);
@@ -203,7 +208,7 @@ export default function AdminPage() {
     try {
       await categoriesAPI.create({ name });
       setCategoryForm(EMPTY_CATEGORY);
-      flash(setCategoryMsg, 'Категория добавлена ✓');
+      flash(setCategoryMsg, 'Категория добавлена');
       await loadAll();
     } catch (err) {
       flash(setCategoryMsg, `Ошибка: ${err.response?.data?.error || err.message}`);
@@ -237,7 +242,7 @@ export default function AdminPage() {
         isActive:         Boolean(modalForm.isActive),
       });
       setModalForm(EMPTY_MODAL);
-      flash(setModalMsg, 'Попап создан ✓');
+      flash(setModalMsg, 'Попап создан');
       await loadAll();
     } catch (err) {
       flash(setModalMsg, `Ошибка: ${err.response?.data?.error || err.message}`);
@@ -248,7 +253,7 @@ export default function AdminPage() {
     if (!window.confirm('Удалить попап?')) return;
     try {
       await adminAPI.deleteAdModal(id);
-      flash(setModalMsg, 'Попап удалён');
+      flash(setModalMsg, 'Попап удален');
       await loadAll();
     } catch (err) {
       flash(setModalMsg, `Ошибка: ${err.response?.data?.error || err.message}`);
@@ -269,7 +274,7 @@ export default function AdminPage() {
 
         <div className={styles.adminHeader}>
           <div>
-            <h1 className={styles.adminTitle}>👑 Админ-панель</h1>
+            <h1 className={styles.adminTitle}>Админ-панель</h1>
             <p className={styles.adminSub}>Фрукт Край — управление магазином</p>
           </div>
           <div className={styles.stats}>
@@ -288,29 +293,52 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <div className={styles.tabs}>
-          {[
-            { key: 'products',   label: '🛍️ Товары' },
-            { key: 'categories', label: '📁 Категории' },
-            { key: 'modals',     label: '🎁 Реклама' },
-            { key: 'deliveryReviews', label: '📊 Отзывы о доставке' },
-          ].map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              className={`${styles.tab} ${tab === t.key ? styles.activeTab : ''}`}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className={styles.tabsWrap}>
+          <button
+            className={styles.burger}
+            onClick={() => setTabsOpen((v) => !v)}
+            aria-label="Меню разделов"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {tabsOpen ? (
+                <>
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </>
+              ) : (
+                <>
+                  <line x1="3" y1="12" x2="21" y2="12"/>
+                  <line x1="3" y1="6" x2="21" y2="6"/>
+                  <line x1="3" y1="18" x2="21" y2="18"/>
+                </>
+              )}
+            </svg>
+          </button>
+
+          <div className={`${styles.tabs} ${tabsOpen ? styles.tabsOpen : ''}`}>
+            {[
+              { key: 'products',   label: 'Товары' },
+              { key: 'categories', label: 'Категории' },
+              { key: 'modals',     label: 'Реклама' },
+              { key: 'deliveryReviews', label: 'Отзывы о доставке' },
+            ].map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                className={`${styles.tab} ${tab === t.key ? styles.activeTab : ''}`}
+                onClick={() => setTab(t.key)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {tab === 'products' && (
           <div className={styles.tabContent}>
             <div className={styles.formCard}>
               <h2 className={styles.formTitle}>
-                {editProductId ? '✏️ Редактировать товар' : '➕ Добавить товар'}
+                {editProductId ? 'Редактировать товар' : 'Добавить товар'}
               </h2>
 
               <form className={styles.form} onSubmit={handleProductSubmit}>
@@ -327,7 +355,6 @@ export default function AdminPage() {
                       />
                     ) : (
                       <div className={styles.uploadPlaceholder}>
-                        <span className={styles.uploadIcon}>📷</span>
                         <p>Нажмите чтобы загрузить фото</p>
                         <span className={styles.uploadHint}>
                           JPG, PNG, WebP — до 5 МБ
@@ -443,10 +470,10 @@ export default function AdminPage() {
 
                 <div className={styles.flags}>
                   {[
-                    { name: 'isNew',      label: '✨ Новинка' },
-                    { name: 'isDiscount', label: '💰 Скидка' },
-                    { name: 'isPopular',  label: '🔥 Популярный' },
-                    { name: 'isDayItem',  label: '⭐ Товар дня' },
+                    { name: 'isNew',      label: 'Новинка' },
+                    { name: 'isDiscount', label: 'Скидка' },
+                    { name: 'isPopular',  label: 'Популярный' },
+                    { name: 'isDayItem',  label: 'Товар дня' },
                   ].map((f) => (
                     <label key={f.name} className={styles.checkboxLabel}>
                       <input
@@ -550,7 +577,7 @@ export default function AdminPage() {
                           className={styles.deleteBtn}
                           onClick={() => handleDeleteProduct(p.id)}
                         >
-                          🗑️
+                          Удалить
                         </button>
                       </span>
                     </div>
@@ -564,7 +591,7 @@ export default function AdminPage() {
         {tab === 'categories' && (
           <div className={styles.tabContent}>
             <div className={styles.formCard}>
-              <h2 className={styles.formTitle}>➕ Добавить категорию</h2>
+              <h2 className={styles.formTitle}>Добавить категорию</h2>
 
               <form className={styles.form} onSubmit={handleCategorySubmit}>
                 <div className={styles.field}>
@@ -627,7 +654,7 @@ export default function AdminPage() {
                             className={styles.deleteBtn}
                             onClick={() => handleDeleteCategory(c.id)}
                           >
-                            🗑️
+                            Удалить
                           </button>
                         </span>
                       </div>
@@ -642,7 +669,7 @@ export default function AdminPage() {
         {tab === 'modals' && (
           <div className={styles.tabContent}>
             <div className={styles.formCard}>
-              <h2 className={styles.formTitle}>➕ Создать рекламный попап</h2>
+              <h2 className={styles.formTitle}>Создать рекламный попап</h2>
 
               <form className={styles.form} onSubmit={handleModalSubmit}>
                 <div className={styles.formGrid}>
@@ -797,7 +824,7 @@ export default function AdminPage() {
                           className={styles.deleteBtn}
                           onClick={() => handleDeleteModal(m.id)}
                         >
-                          🗑️
+                          Удалить
                         </button>
                       </span>
                     </div>
@@ -812,7 +839,7 @@ export default function AdminPage() {
           <div className={styles.tabContent}>
             {deliveryStats && (
               <div className={styles.statsCard}>
-                <h2 className={styles.statsTitle}>📊 Статистика доставки</h2>
+                <h2 className={styles.statsTitle}>Статистика доставки</h2>
                 <div className={styles.statsRow}>
                   <div className={styles.statBox}>
                     <span className={styles.statBig}>{deliveryStats.avg}</span>

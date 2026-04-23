@@ -10,7 +10,7 @@ export default function CartPage() {
   if (items.length === 0) {
     return (
       <div className={styles.empty}>
-        <span className={styles.emptyIcon}>🛒</span>
+        {/* <span className={styles.emptyIcon}>🛒</span> */}
         <h2>Корзина пуста</h2>
         <p>Добавьте товары из каталога, чтобы оформить заказ</p>
         <Link to="/catalog" className="btn btn-cherry" style={{ marginTop: 24 }}>

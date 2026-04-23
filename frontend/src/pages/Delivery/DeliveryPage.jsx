@@ -15,7 +15,6 @@ function loadYandexMapsScript() {
       resolve(window.ymaps);
       return;
     }
-
     const existing = document.querySelector('script[src*="api-maps.yandex.ru"]');
     if (existing) {
       const check = setInterval(() => {
@@ -26,7 +25,6 @@ function loadYandexMapsScript() {
       }, 100);
       return;
     }
-
     const script = document.createElement('script');
     script.src = `https://api-maps.yandex.ru/2.1/?apikey=${API_KEY}&lang=ru_RU`;
     script.async = true;
@@ -43,7 +41,7 @@ function loadYandexMapsScript() {
 }
 
 export default function DeliveryPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { items, totalPrice, clearCart } = useCart();
   const navigate = useNavigate();
 
@@ -51,18 +49,44 @@ export default function DeliveryPage() {
   const mapInstance = useRef(null);
   const placemarkRef = useRef(null);
 
-  const [coords, setCoords] = useState([
-    user?.lastLat || START_CENTER[0],
-    user?.lastLng || START_CENTER[1],
-  ]);
-  const [address, setAddress] = useState(user?.lastAddress || '');
-  const [query, setQuery] = useState(user?.lastAddress || '');
+  const [coords, setCoords] = useState(START_CENTER);
+  const [address, setAddress] = useState('');
+  const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSuggest, setLoadingSuggest] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [mapReady, setMapReady] = useState(false);
 
+  // При монтировании: загружаем свежий профиль и подтягиваем последний адрес
+  useEffect(() => {
+    let mounted = true;
+
+    const init = async () => {
+      try {
+        const freshUser = await refreshUser();
+        if (!mounted || !freshUser) return;
+
+        if (freshUser.lastAddress) {
+          setAddress(freshUser.lastAddress);
+          setQuery(freshUser.lastAddress);
+        }
+        if (freshUser.lastLat && freshUser.lastLng) {
+          setCoords([freshUser.lastLat, freshUser.lastLng]);
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки профиля:', err);
+      }
+    };
+
+    init();
+
+    return () => {
+      mounted = false;
+    };
+  }, [refreshUser]);
+
+  // Карта
   useEffect(() => {
     let destroyed = false;
 
@@ -107,6 +131,7 @@ export default function DeliveryPage() {
     };
   }, []);
 
+  // Синхронизация координат с картой
   useEffect(() => {
     if (mapInstance.current && placemarkRef.current) {
       mapInstance.current.setCenter(coords, 13);
@@ -114,6 +139,7 @@ export default function DeliveryPage() {
     }
   }, [coords]);
 
+  // Подсказки адресов
   useEffect(() => {
     if (!API_KEY || !query || query.trim().length < 3) {
       setSuggestions([]);

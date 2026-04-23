@@ -33,14 +33,6 @@ export default function OrderTrackingPage() {
         if (lastOrder) {
           setOrder(lastOrder);
           setDeliveryMinutes(lastOrder.deliveryMinutes || 30);
-          // Проверяем, есть ли уже отзыв на доставку
-          try {
-            const rev = await deliveryReviewsAPI.getAll();
-            const exists = rev.data.reviews?.some((r) => r.orderId === lastOrder.id);
-            setHasDeliveryReview(exists);
-          } catch {
-            setHasDeliveryReview(false);
-          }
         } else {
           navigate('/profile');
         }
@@ -53,6 +45,22 @@ export default function OrderTrackingPage() {
 
     load();
   }, [state.order, navigate]);
+
+  // Проверяем, есть ли уже отзыв на доставку для текущего заказа
+  useEffect(() => {
+    if (!order) return;
+    const check = async () => {
+      try {
+        const { data } = await deliveryReviewsAPI.getMy();
+        const exists = data.reviews?.some((r) => r.orderId === order.id);
+        setHasDeliveryReview(exists);
+        if (exists) setShowReview(false);
+      } catch {
+        setHasDeliveryReview(false);
+      }
+    };
+    check();
+  }, [order?.id]);
 
   // Таймер фаз доставки
   useEffect(() => {
@@ -138,7 +146,7 @@ export default function OrderTrackingPage() {
               <>
                 <div className={styles.pulseWrap}>
                   <div className={styles.pulse} />
-                  <span className={styles.bagIcon}>📦</span>
+                  <span className={styles.bagIcon}></span>
                 </div>
                 <h2 className={styles.statusTitle}>Собираем ваш заказ</h2>
                 <p className={styles.statusSub}>
@@ -149,7 +157,7 @@ export default function OrderTrackingPage() {
 
             {phase === 'delivering' && (
               <>
-                <div className={styles.carWrap}>🚚</div>
+                <div className={styles.carWrap}></div>
                 <h2 className={styles.statusTitle}>Ваш заказ в пути</h2>
                 <p className={styles.statusSub}>
                   Приблизительное время: <strong>{formatTime(timeLeft)}</strong>
@@ -159,7 +167,7 @@ export default function OrderTrackingPage() {
 
             {phase === 'done' && (
               <>
-                <div className={styles.doneWrap}>🍒</div>
+                <div className={styles.doneWrap}></div>
                 <h2 className={styles.statusTitle}>Заказ доставлен!</h2>
                 <p className={styles.statusSub}>Приятного аппетита</p>
               </>
@@ -187,7 +195,7 @@ export default function OrderTrackingPage() {
           </div>
 
           {phase === 'done' && hasDeliveryReview && (
-            <p className={styles.alreadyReviewed}>✓ Вы уже оставили отзыв о доставке</p>
+            <p className={styles.alreadyReviewed}>Вы уже оставили отзыв о доставке</p>
           )}
         </div>
       </div>
@@ -229,7 +237,7 @@ export default function OrderTrackingPage() {
       {showReview && reviewSent && (
         <div className={styles.overlay}>
           <div className={styles.modal}>
-            <div className={styles.doneIcon}>🙏</div>
+            <div className={styles.doneIcon}></div>
             <h3 className={styles.modalTitle}>Спасибо за отзыв!</h3>
           </div>
         </div>

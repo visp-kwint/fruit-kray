@@ -56,13 +56,18 @@ backend/src/middleware/cors.ts
 backend/src/middleware/rateLimit.ts
 backend/src/routes/admin.ts
 backend/src/routes/auth.ts
+backend/src/routes/cart.ts
 backend/src/routes/categories.ts
+backend/src/routes/deliveryReviews.ts
 backend/src/routes/orders.ts
 backend/src/routes/products.ts
+backend/src/routes/reviews.ts
 backend/src/routes/upload.ts
 backend/src/routes/users.ts
 backend/src/types/index.ts
 backend/tsconfig.json
+backend/uploads/1776774144153-698745.jpg
+backend/uploads/1776888494086-594252.jpg
 frontend/.env
 frontend/package.json
 frontend/public/assets/hero-frukt-kray.png
@@ -79,6 +84,8 @@ frontend/src/components/ProductCard/ProductCard.jsx
 frontend/src/components/ProductCard/ProductCard.module.css
 frontend/src/components/ProductDetailsModal/ProductDetailsModal.jsx
 frontend/src/components/ProductDetailsModal/ProductDetailsModal.module.css
+frontend/src/components/ReviewModal/ReviewModal.jsx
+frontend/src/components/ReviewModal/ReviewModal.module.css
 frontend/src/components/Slider/ProductSlider.jsx
 frontend/src/components/Slider/ProductSlider.module.css
 frontend/src/context/AuthContext.js
@@ -99,6 +106,8 @@ frontend/src/pages/Home/HomePage.jsx
 frontend/src/pages/Home/HomePage.module.css
 frontend/src/pages/Profile/ProfilePage.jsx
 frontend/src/pages/Profile/ProfilePage.module.css
+frontend/src/pages/Tracking/OrderTrackingPage.jsx
+frontend/src/pages/Tracking/OrderTrackingPage.module.css
 frontend/src/styles/global.css
 </directory_structure>
 
@@ -107,6 +116,7 @@ This section contains the contents of the repository's files.
 
 <file path=".gitignore">
 node_modules/
+repomix-output.xml
 </file>
 
 <file path="backend/.env">
@@ -135,6 +145,9 @@ NODE_ENV="development"
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.8.1",
@@ -179,7 +192,6 @@ model Category {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   products Product[]
-  adModals AdModal[]
 
   @@map("categories")
 }
@@ -195,7 +207,10 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  orders Order[]
+  orders          Order[]
+  reviews         Review[]
+  deliveryReviews DeliveryReview[]
+  cartItems       CartItem[]
 
   @@map("users")
 }
@@ -218,8 +233,11 @@ model Product {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  orderItems OrderItem[]
-  adModals   AdModal[]
+  orderItems      OrderItem[]
+  adModalsTrigger AdModal[] @relation("AdModalTrigger")
+  adModalsProduct AdModal[] @relation("AdModalProduct")
+  reviews         Review[]
+  cartItems       CartItem[]
 
   @@map("products")
 }
@@ -235,8 +253,10 @@ model Order {
   deliveryMinutes Int      @map("delivery_minutes")
   createdAt       DateTime @default(now()) @map("created_at")
 
-  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items OrderItem[]
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items          OrderItem[]
+  reviews        Review[]
+  deliveryReview DeliveryReview?
 
   @@map("orders")
 }
@@ -257,17 +277,68 @@ model OrderItem {
 
 model AdModal {
   id                String   @id @default(cuid())
-  triggerCategoryId String   @map("trigger_category_id")
+  triggerProductId  String   @map("trigger_product_id")
   title             String
   description       String   @default("")
   productId         String   @map("product_id")
   isActive          Boolean  @default(true) @map("is_active")
   createdAt         DateTime @default(now()) @map("created_at")
 
-  triggerCategory Category @relation(fields: [triggerCategoryId], references: [id], onDelete: Cascade)
-  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  triggerProduct Product @relation("AdModalTrigger", fields: [triggerProductId], references: [id], onDelete: Cascade)
+  product        Product @relation("AdModalProduct", fields: [productId], references: [id], onDelete: Cascade)
 
   @@map("ad_modals")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  orderId   String   @map("order_id")
+  rating    Int
+  comment   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId, orderId], name: "user_product_order_unique")
+  @@map("reviews")
+}
+
+model DeliveryReview {
+  id        String   @id @default(cuid())
+  orderId   String   @unique @map("order_id")
+  userId    String   @map("user_id")
+  rating    Int
+  comment   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("delivery_reviews")
+}
+
+model CartItem {
+  id           String @id @default(cuid())
+  userId       String @map("user_id")
+  productId    String @map("product_id")
+  name         String
+  price        Float
+  quantity     Int
+  imageUrl     String @default("") @map("image_url")
+  categoryName String @default("") @map("category_name")
+  categorySlug String @default("") @map("category_slug")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("cart_items")
 }
 </file>
 
@@ -301,6 +372,8 @@ async function main() {
   console.log('🌱 Сидирование базы данных...');
 
   await prisma.adModal.deleteMany();
+  await prisma.deliveryReview.deleteMany();
+  await prisma.review.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.product.deleteMany();
@@ -333,7 +406,7 @@ async function main() {
     'Ягоды',
   ];
 
-  const categories = {};
+  const categories: Record<string, any> = {};
   for (const name of categoriesData) {
     const cat = await prisma.category.create({
       data: {
@@ -523,22 +596,22 @@ async function main() {
   await prisma.adModal.createMany({
     data: [
       {
-        triggerCategoryId: fruits.id,
-        title: 'К фруктам — десерт в подарок? 🍰',
+        triggerProductId: apples.id,
+        title: 'К фруктам — десерт в подарок?',
         description: 'Отлично сочетается с вашей покупкой!',
         productId: cherryCake.id,
         isActive: true,
       },
       {
-        triggerCategoryId: vegetables.id,
-        title: 'Дополните ужин десертом! 🍒',
+        triggerProductId: tomatoes.id,
+        title: 'Дополните ужин десертом!',
         description: 'Сладкое завершение овощного блюда.',
         productId: strawberryTart.id,
         isActive: true,
       },
       {
-        triggerCategoryId: desserts.id,
-        title: 'К десерту — свежие ягоды! 🍒',
+        triggerProductId: cherryCake.id,
+        title: 'К десерту — свежие ягоды!',
         description: 'Вишня прекрасно дополнит ваш десерт.',
         productId: cherry.id,
         isActive: true,
@@ -546,7 +619,8 @@ async function main() {
     ],
   });
 
-  await prisma.order.create({
+  // === ЗАКАЗ 1: Выполнен, можно оставить отзыв на товары и доставку ===
+  const order1 = await prisma.order.create({
     data: {
       userId: user.id,
       totalPrice: 1450,
@@ -574,12 +648,117 @@ async function main() {
     },
   });
 
+  // === ЗАКАЗ 2: Выполнен, для тестирования отзывов ===
+  const order2 = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalPrice: 890,
+      status: 'DONE',
+      deliveryAddress: 'Россия, Ростовская область, Таганрог, Петровская улица, 109А',
+      deliveryLat: 47.2096,
+      deliveryLng: 38.9352,
+      deliveryMinutes: 45,
+      items: {
+        create: [
+          {
+            productId: apples.id,
+            name: apples.name,
+            price: apples.price,
+            quantity: 3,
+          },
+          {
+            productId: strawberryTart.id,
+            name: strawberryTart.name,
+            price: strawberryTart.price,
+            quantity: 1,
+          },
+        ],
+      },
+    },
+  });
+
+  // === ЗАКАЗ 3: Выполнен, для тестирования ===
+  const order3 = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalPrice: 260,
+      status: 'DONE',
+      deliveryAddress: 'Россия, Ростовская область, Таганрог, Петровская улица, 109А',
+      deliveryLat: 47.2096,
+      deliveryLng: 38.9352,
+      deliveryMinutes: 15,
+      items: {
+        create: [
+          {
+            productId: strudel.id,
+            name: strudel.name,
+            price: strudel.price,
+            quantity: 1,
+          },
+        ],
+      },
+    },
+  });
+
+  // === ЗАКАЗ 4: В процессе (нельзя оставить отзыв) ===
+  const order4 = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalPrice: 3360,
+      status: 'PENDING',
+      deliveryAddress: 'Россия, Ростовская область, Таганрог, Петровская улица, 109А',
+      deliveryLat: 47.2096,
+      deliveryLng: 38.9352,
+      deliveryMinutes: 30,
+      items: {
+        create: [
+          {
+            productId: cherry.id,
+            name: cherry.name,
+            price: cherry.price,
+            quantity: 1,
+          },
+          {
+            productId: apples.id,
+            name: apples.name,
+            price: apples.price,
+            quantity: 2,
+          },
+          {
+            productId: cherryCake.id,
+            name: cherryCake.name,
+            price: cherryCake.price,
+            quantity: 2,
+          },
+          {
+            productId: strawberryTart.id,
+            name: strawberryTart.name,
+            price: strawberryTart.price,
+            quantity: 1,
+          },
+          {
+            productId: pannaCotta.id,
+            name: pannaCotta.name,
+            price: pannaCotta.price,
+            quantity: 1,
+          },
+          {
+            productId: strudel.id,
+            name: strudel.name,
+            price: strudel.price,
+            quantity: 1,
+          },
+        ],
+      },
+    },
+  });
+
   console.log('✅ Админ:', admin.email);
   console.log('✅ Пользователь:', user.email);
   console.log('✅ Категорий:', 4);
   console.log('✅ Товаров:', 12);
   console.log('✅ Попапов:', 3);
-  console.log('✅ Тестовый заказ создан');
+  console.log('✅ Заказов:', 4, '(3 выполнено, 1 в обработке)');
 }
 
 main()
@@ -620,6 +799,13 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+// отзывы
+export const deliveryReviewsAPI = {
+  create: (data) => api.post('/delivery-reviews', data),
+  getAll: ()     => api.get('/delivery-reviews'),
+  getMy:  ()     => api.get('/delivery-reviews/my'),
+};
 
 // ── Товары ───────────────────────────────────────────────────────
 export const productsAPI = {
@@ -695,13 +881,16 @@ import { cors } from './middleware/cors';
 import { globalLimiter } from './middleware/rateLimit';
 import { prisma } from './db';
 
-import authRouter       from './routes/auth';
-import categoriesRouter from './routes/categories';
-import productsRouter   from './routes/products';
-import ordersRouter     from './routes/orders';
-import usersRouter      from './routes/users';
-import adminRouter      from './routes/admin';
-import uploadRouter     from './routes/upload';
+import authRouter            from './routes/auth';
+import categoriesRouter      from './routes/categories';
+import productsRouter        from './routes/products';
+import ordersRouter          from './routes/orders';
+import usersRouter           from './routes/users';
+import adminRouter           from './routes/admin';
+import uploadRouter          from './routes/upload';
+import reviewsRouter         from './routes/reviews';
+import deliveryReviewsRouter from './routes/deliveryReviews';
+import cartRouter            from './routes/cart';
 
 const app  = express();
 const PORT = process.env.PORT ?? 8080;
@@ -710,16 +899,18 @@ app.use(cors);
 app.use(express.json({ limit: '10mb' }));
 app.use(globalLimiter);
 
-// Отдаём загруженные файлы статически
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-app.use('/api/auth',       authRouter);
-app.use('/api/categories', categoriesRouter);
-app.use('/api/products',   productsRouter);
-app.use('/api/orders',     ordersRouter);
-app.use('/api/users',      usersRouter);
-app.use('/api/admin',      adminRouter);
-app.use('/api/upload',     uploadRouter);
+app.use('/api/auth',             authRouter);
+app.use('/api/categories',       categoriesRouter);
+app.use('/api/products',         productsRouter);
+app.use('/api/orders',           ordersRouter);
+app.use('/api/users',            usersRouter);
+app.use('/api/admin',            adminRouter);
+app.use('/api/upload',           uploadRouter);
+app.use('/api/reviews',          reviewsRouter);
+app.use('/api/delivery-reviews', deliveryReviewsRouter);
+app.use('/api/cart',             cartRouter);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: '🍒 Фрукт Край API' });
@@ -861,7 +1052,7 @@ const ProductSchema = z.object({
 });
 
 const AdModalSchema = z.object({
-  triggerCategoryId: z.string().min(1, 'Категория-триггер обязательна'),
+  triggerProductId: z.string().min(1, 'Товар-триггер обязателен'),
   title: z.string().min(1, 'Заголовок обязателен'),
   description: z.string().default(''),
   productId: z.string().min(1, 'Товар обязателен'),
@@ -939,7 +1130,7 @@ router.delete('/products/:id', async (req: AuthRequest, res: Response) => {
 router.get('/admodals', async (_req: AuthRequest, res: Response) => {
   const modals = await prisma.adModal.findMany({
     include: {
-      triggerCategory: true,
+      triggerProduct: true,
       product: {
         include: { category: true },
       },
@@ -957,11 +1148,11 @@ router.post('/admodals', async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const category = await prisma.category.findUnique({
-    where: { id: parsed.data.triggerCategoryId },
+  const triggerProduct = await prisma.product.findUnique({
+    where: { id: parsed.data.triggerProductId },
   });
-  if (!category) {
-    res.status(404).json({ error: 'Категория не найдена' });
+  if (!triggerProduct) {
+    res.status(404).json({ error: 'Товар-триггер не найден' });
     return;
   }
 
@@ -969,14 +1160,14 @@ router.post('/admodals', async (req: AuthRequest, res: Response) => {
     where: { id: parsed.data.productId },
   });
   if (!product) {
-    res.status(404).json({ error: 'Товар не найден' });
+    res.status(404).json({ error: 'Рекламируемый товар не найден' });
     return;
   }
 
   const modal = await prisma.adModal.create({
     data: parsed.data,
     include: {
-      triggerCategory: true,
+      triggerProduct: true,
       product: { include: { category: true } },
     },
   });
@@ -1101,6 +1292,106 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
 export default router;
 </file>
 
+<file path="backend/src/routes/cart.ts">
+import { Router, Response } from 'express';
+import { z } from 'zod';
+import { prisma } from '../db';
+import { requireAuth } from '../middleware/auth';
+import { AuthRequest } from '../types';
+
+const router = Router();
+
+const CartItemSchema = z.object({
+  productId: z.string().min(1),
+  name: z.string().min(1),
+  price: z.number().positive(),
+  quantity: z.number().int().positive(),
+  imageUrl: z.string().default(''),
+  categoryName: z.string().default(''),
+  categorySlug: z.string().default(''),
+});
+
+const SyncSchema = z.object({
+  items: z.array(CartItemSchema),
+});
+
+// GET /api/cart
+router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
+  const items = await prisma.cartItem.findMany({
+    where: { userId: req.user!.userId },
+    orderBy: { createdAt: 'asc' },
+  });
+  res.json({ items });
+});
+
+// PUT /api/cart — полная синхронизация
+router.put('/', requireAuth, async (req: AuthRequest, res: Response) => {
+  const parsed = SyncSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Неверные данные корзины' });
+    return;
+  }
+
+  const userId = req.user!.userId;
+  const { items } = parsed.data;
+
+  // Проверяем, что все товары существуют в БД
+  const productIds = items.map((i) => i.productId);
+  if (productIds.length > 0) {
+    const existing = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((p) => p.id));
+    const missing = productIds.find((id) => !existingIds.has(id));
+    if (missing) {
+      res.status(400).json({ error: 'Товар в корзине больше не существует. Обновите корзину.' });
+      return;
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.cartItem.deleteMany({ where: { userId } });
+    if (items.length > 0) {
+      await tx.cartItem.createMany({
+        data: items.map((item) => ({
+          userId,
+          ...item,
+        })),
+      });
+    }
+  });
+
+  const updated = await prisma.cartItem.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  res.json({ items: updated });
+});
+
+// DELETE /api/cart/:productId
+router.delete('/:productId', requireAuth, async (req: AuthRequest, res: Response) => {
+  await prisma.cartItem.deleteMany({
+    where: {
+      userId: req.user!.userId,
+      productId: req.params.productId,
+    },
+  });
+  res.json({ message: 'Удалено' });
+});
+
+// DELETE /api/cart — очистить всё
+router.delete('/', requireAuth, async (req: AuthRequest, res: Response) => {
+  await prisma.cartItem.deleteMany({
+    where: { userId: req.user!.userId },
+  });
+  res.json({ message: 'Корзина очищена' });
+});
+
+export default router;
+</file>
+
 <file path="backend/src/routes/categories.ts">
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
@@ -1181,6 +1472,97 @@ router.delete('/:id', requireAuth, requireAdmin, async (req: Request, res: Respo
 export default router;
 </file>
 
+<file path="backend/src/routes/deliveryReviews.ts">
+import { Router, Response } from 'express';
+import { z } from 'zod';
+import { prisma } from '../db';
+import { requireAuth, requireAdmin } from '../middleware/auth';
+import { AuthRequest } from '../types';
+
+const router = Router();
+
+const CreateSchema = z.object({
+  orderId: z.string().min(1, 'Укажите заказ'),
+  rating:  z.coerce.number().int().min(1).max(5, 'Рейтинг 1–5'),
+  comment: z.string().min(1, 'Напишите комментарий').max(1000),
+});
+
+// POST /api/delivery-reviews
+router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
+  const parsed = CreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.errors[0]?.message });
+    return;
+  }
+
+  const { orderId, rating, comment } = parsed.data;
+  const userId = req.user!.userId;
+
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, userId },
+  });
+
+  if (!order) {
+    res.status(403).json({ error: 'Заказ не найден' });
+    return;
+  }
+
+  const existing = await prisma.deliveryReview.findUnique({
+    where: { orderId },
+  });
+
+  if (existing) {
+    res.status(409).json({ error: 'Вы уже оставили отзыв на эту доставку' });
+    return;
+  }
+
+  const review = await prisma.deliveryReview.create({
+    data: { orderId, userId, rating, comment },
+    include: {
+      user:  { select: { email: true } },
+      order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true } },
+    },
+  });
+
+  res.status(201).json(review);
+});
+
+// GET /api/delivery-reviews/my — мои отзывы
+router.get('/my', requireAuth, async (req: AuthRequest, res: Response) => {
+  const reviews = await prisma.deliveryReview.findMany({
+    where: { userId: req.user!.userId },
+    include: {
+      order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json({ reviews });
+});
+
+// GET /api/delivery-reviews — все отзывы (админ)
+router.get('/', requireAuth, requireAdmin, async (_req: AuthRequest, res: Response) => {
+  const reviews = await prisma.deliveryReview.findMany({
+    include: {
+      user:  { select: { email: true } },
+      order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const total = reviews.length;
+  const avg   = total ? (reviews.reduce((s, r) => s + r.rating, 0) / total).toFixed(1) : '0.0';
+
+  const distribution = [5, 4, 3, 2, 1].map((star) => ({
+    rating: star,
+    count:  reviews.filter((r) => r.rating === star).length,
+  }));
+
+  res.json({ reviews, stats: { total, avg, distribution } });
+});
+
+export default router;
+</file>
+
 <file path="backend/src/routes/orders.ts">
 import { Router, Response } from 'express';
 import { z } from 'zod';
@@ -1204,7 +1586,6 @@ const CreateOrderSchema = z.object({
   deliveryLng:     z.number().default(0),
 });
 
-// ── POST /api/orders ───────────────────────────────────────────────
 router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   const parsed = CreateOrderSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -1215,8 +1596,23 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   const { items, deliveryAddress, deliveryLat, deliveryLng } = parsed.data;
   const userId = req.user!.userId;
 
+  // ── Проверяем, что все товары из корзины ещё существуют в БД ──
+  const productIds = items.map((i) => i.productId);
+  const existingProducts = await prisma.product.findMany({
+    where: { id: { in: productIds } },
+    select: { id: true },
+  });
+  const existingIds = new Set(existingProducts.map((p) => p.id));
+  const missing = productIds.find((id) => !existingIds.has(id));
+  if (missing) {
+    res.status(400).json({
+      error: 'Один из товаров в корзине больше не существует. Обновите корзину.',
+    });
+    return;
+  }
+
   const totalPrice      = items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const deliveryMinutes = Math.floor(Math.random() * 56) + 5;
+  const deliveryMinutes = Math.floor(Math.random() * 51) + 10; // ← 10–60 мин
 
   const order = await prisma.$transaction(async (tx) => {
     const newOrder = await tx.order.create({
@@ -1255,7 +1651,6 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   });
 });
 
-// ── GET /api/orders ────────────────────────────────────────────────
 router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
   const orders = await prisma.order.findMany({
     where:   { userId: req.user!.userId },
@@ -1266,7 +1661,6 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
   res.json({ orders });
 });
 
-// ── GET /api/orders/frequent ───────────────────────────────────────
 router.get('/frequent', requireAuth, async (req: AuthRequest, res: Response) => {
   const userId = req.user!.userId;
 
@@ -1314,8 +1708,9 @@ const FiltersSchema = z.object({
   search: z.string().optional(),
   minPrice: z.coerce.number().nonnegative().optional(),
   maxPrice: z.coerce.number().nonnegative().optional(),
+  sort: z.enum(['popular', 'new', 'cheap', 'expensive', 'default']).optional().default('default'),
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(200).default(20),
 });
 
 router.get('/', async (req: Request, res: Response) => {
@@ -1325,7 +1720,7 @@ router.get('/', async (req: Request, res: Response) => {
     return;
   }
 
-  const { categorySlug, search, minPrice, maxPrice, page, limit } = parsed.data;
+  const { categorySlug, search, minPrice, maxPrice, sort, page, limit } = parsed.data;
 
   const where: Prisma.ProductWhereInput = {
     ...(categorySlug && {
@@ -1346,6 +1741,23 @@ router.get('/', async (req: Request, res: Response) => {
     }),
   };
 
+  let orderBy: Prisma.ProductOrderByWithRelationInput | Prisma.ProductOrderByWithRelationInput[] = { createdAt: 'desc' };
+
+  switch (sort) {
+    case 'popular':
+      orderBy = [{ isPopular: 'desc' }, { createdAt: 'desc' }];
+      break;
+    case 'new':
+      orderBy = [{ isNew: 'desc' }, { createdAt: 'desc' }];
+      break;
+    case 'cheap':
+      orderBy = { price: 'asc' };
+      break;
+    case 'expensive':
+      orderBy = { price: 'desc' };
+      break;
+  }
+
   const skip = (page - 1) * limit;
 
   const [products, total] = await Promise.all([
@@ -1354,7 +1766,7 @@ router.get('/', async (req: Request, res: Response) => {
       include: { category: true },
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy,
     }),
     prisma.product.count({ where }),
   ]);
@@ -1362,24 +1774,21 @@ router.get('/', async (req: Request, res: Response) => {
   res.json({ products, total, page, limit });
 });
 
-router.get('/admodal/by-category', async (req: Request, res: Response) => {
-  const categoryId = req.query.categoryId as string | undefined;
-  const categorySlug = req.query.categorySlug as string | undefined;
+router.get('/admodal/by-product', async (req: Request, res: Response) => {
+  const productId = req.query.productId as string | undefined;
 
-  if (!categoryId && !categorySlug) {
-    res.status(400).json({ error: 'Укажите categoryId или categorySlug' });
+  if (!productId) {
+    res.status(400).json({ error: 'Укажите productId' });
     return;
   }
 
   const modal = await prisma.adModal.findFirst({
     where: {
       isActive: true,
-      ...(categoryId
-        ? { triggerCategoryId: categoryId }
-        : { triggerCategory: { slug: categorySlug! } }),
+      triggerProductId: productId,
     },
     include: {
-      triggerCategory: true,
+      triggerProduct: true,
       product: {
         include: { category: true },
       },
@@ -1406,6 +1815,107 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 
   res.json(product);
+});
+
+export default router;
+</file>
+
+<file path="backend/src/routes/reviews.ts">
+import { Router, Response } from 'express';
+import { z } from 'zod';
+import { prisma } from '../db';
+import { requireAuth } from '../middleware/auth';
+import { AuthRequest } from '../types';
+
+const router = Router();
+
+const CreateReviewSchema = z.object({
+  productId: z.string().min(1, 'Укажите товар'),
+  orderId:   z.string().min(1, 'Укажите заказ'),
+  rating:    z.coerce.number().int().min(1).max(5, 'Рейтинг от 1 до 5'),
+  comment:   z.string().min(1, 'Напишите текст отзыва').max(1000, 'Максимум 1000 символов'),
+});
+
+// POST /api/reviews — создать отзыв
+router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
+  const parsed = CreateReviewSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.errors[0]?.message });
+    return;
+  }
+
+  const { productId, orderId, rating, comment } = parsed.data;
+  const userId = req.user!.userId;
+
+  // Проверяем, что заказ выполнен и принадлежит пользователю
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, userId, status: 'DONE' },
+    include: { items: true },
+  });
+
+  if (!order) {
+    res.status(403).json({ error: 'Заказ не найден или ещё не выполнен' });
+    return;
+  }
+
+  // Проверяем, что товар был в заказе
+  const hasProduct = order.items.some((item) => item.productId === productId);
+  if (!hasProduct) {
+    res.status(400).json({ error: 'Этого товара не было в заказе' });
+    return;
+  }
+
+  // Проверяем, не оставлял ли уже отзыв
+  const existing = await prisma.review.findUnique({
+    where: {
+      user_product_order_unique: {
+        userId,
+        productId,
+        orderId,
+      },
+    },
+  });
+
+  if (existing) {
+    res.status(409).json({ error: 'Вы уже оставили отзыв на этот товар из этого заказа' });
+    return;
+  }
+
+  const review = await prisma.review.create({
+    data: { userId, productId, orderId, rating, comment },
+    include: {
+      user:    { select: { email: true } },
+      product: { select: { name: true, imageUrl: true } },
+      order:   { select: { id: true } },
+    },
+  });
+
+  res.status(201).json(review);
+});
+
+// GET /api/reviews/my — мои отзывы
+router.get('/my', requireAuth, async (req: AuthRequest, res: Response) => {
+  const reviews = await prisma.review.findMany({
+    where: { userId: req.user!.userId },
+    include: {
+      product: { select: { id: true, name: true, imageUrl: true } },
+      order:   { select: { id: true, createdAt: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json({ reviews });
+});
+
+// GET /api/reviews/product/:productId — отзывы на товар
+router.get('/product/:productId', async (req, res) => {
+  const reviews = await prisma.review.findMany({
+    where: { productId: req.params.productId },
+    include: {
+      user: { select: { email: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json({ reviews });
 });
 
 export default router;
@@ -1594,7 +2104,7 @@ export interface AuthRequest extends Request {
 
 <file path="frontend/.env">
 REACT_APP_API_URL=http://localhost:8080/api
-REACT_APP_YANDEX_MAPS_KEY=
+REACT_APP_YANDEX_MAPS_KEY=d6e6c560-f89d-4f14-9671-d32735b600c2
 </file>
 
 <file path="frontend/package.json">
@@ -1684,13 +2194,11 @@ api.interceptors.response.use(
   }
 );
 
-// ── Auth ────────────────────────────────────────────────────
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login:    (data) => api.post('/auth/login', data),
 };
 
-// ── Categories ──────────────────────────────────────────────
 export const categoriesAPI = {
   getAll:     ()     => api.get('/categories'),
   getAdminAll:()     => api.get('/categories'),
@@ -1698,15 +2206,13 @@ export const categoriesAPI = {
   remove:     (id)   => api.delete(`/categories/${id}`),
 };
 
-// ── Products ────────────────────────────────────────────────
 export const productsAPI = {
   getAll:    (params = {}) => api.get('/products', { params }),
   getById:   (id)          => api.get(`/products/${id}`),
-  getAdModal:(params = {}) =>
-    api.get('/products/admodal/by-category', { params }),
+  getAdModal:(productId)   =>
+    api.get('/products/admodal/by-product', { params: { productId } }),
 };
 
-// ── Upload ──────────────────────────────────────────────────
 export const uploadAPI = {
   image: (file) => {
     const form = new FormData();
@@ -1717,21 +2223,37 @@ export const uploadAPI = {
   },
 };
 
-// ── Orders ──────────────────────────────────────────────────
 export const ordersAPI = {
   create:      (data) => api.post('/orders', data),
   getAll:      ()     => api.get('/orders'),
   getFrequent: ()     => api.get('/orders/frequent'),
 };
 
-// ── User ────────────────────────────────────────────────────
 export const userAPI = {
   getProfile:    ()     => api.get('/users/profile'),
   updateProfile: (data) => api.put('/users/profile', data),
   getFrequent:   ()     => api.get('/orders/frequent'),
 };
 
-// ── Admin ────────────────────────────────────────────────────
+export const reviewsAPI = {
+  create:      (data) => api.post('/reviews', data),
+  getMy:       ()     => api.get('/reviews/my'),
+  getByProduct:(id)   => api.get(`/reviews/product/${id}`),
+};
+
+export const deliveryReviewsAPI = {
+  create: (data) => api.post('/delivery-reviews', data),
+  getAll: ()     => api.get('/delivery-reviews'),
+  getMy:  ()     => api.get('/delivery-reviews/my'),
+};
+
+export const cartAPI = {
+  getAll: ()              => api.get('/cart'),
+  sync:   (items)         => api.put('/cart', { items }),
+  remove: (productId)     => api.delete(`/cart/${productId}`),
+  clear:  ()              => api.delete('/cart'),
+};
+
 export const adminAPI = {
   createProduct:  (data)     => api.post('/admin/products', data),
   updateProduct:  (id, data) => api.put(`/admin/products/${id}`, data),
@@ -1756,19 +2278,18 @@ import HomePage from './pages/Home/HomePage';
 import CatalogPage from './pages/Catalog/CatalogPage';
 import CartPage from './pages/Cart/CartPage';
 import DeliveryPage from './pages/Delivery/DeliveryPage';
+import OrderTrackingPage from './pages/Tracking/OrderTrackingPage';
 import ProfilePage from './pages/Profile/ProfilePage';
 import AdminPage from './pages/Admin/AdminPage';
 import LoginPage from './pages/Auth/LoginPage';
 import RegisterPage from './pages/Auth/RegisterPage';
 import { useAuth } from './context/AuthContext';
 
-// Защищённый маршрут
 function PrivateRoute({ children }) {
   const { user } = useAuth();
   return user ? children : <Navigate to="/login" replace />;
 }
 
-// Маршрут только для администратора
 function AdminRoute({ children }) {
   const { user, isAdmin } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
@@ -1799,6 +2320,14 @@ function AppRoutes() {
             element={
               <PrivateRoute>
                 <DeliveryPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/tracking"
+            element={
+              <PrivateRoute>
+                <OrderTrackingPage />
               </PrivateRoute>
             }
           />
@@ -1844,26 +2373,23 @@ import { productsAPI } from '../../api';
 import { useCart } from '../../context/CartContext';
 import styles from './AdModal.module.css';
 
-export default function AdModal({ triggerCategory, onClose }) {
+export default function AdModal({ triggerProductId, onClose, onOpenProductDetails }) {
   const [modal, setModal] = useState(null);
   const [product, setProduct] = useState(null);
   const [visible, setVisible] = useState(false);
   const { addItem } = useCart();
 
   useEffect(() => {
-    if (!triggerCategory) return;
+    if (!triggerProductId) return;
 
     const fetchModal = async () => {
       try {
-        const { data } = await productsAPI.getAdModal(triggerCategory);
+        const { data } = await productsAPI.getAdModal(triggerProductId);
         setModal(data);
-
-        // Загружаем предлагаемый товар
-        if (data.product_id) {
-          const { data: prod } = await productsAPI.getById(data.product_id);
+        if (data.product?.id) {
+          const { data: prod } = await productsAPI.getById(data.product.id);
           setProduct(prod);
         }
-
         setVisible(true);
       } catch {
         // Попап не настроен — ничего не показываем
@@ -1871,18 +2397,25 @@ export default function AdModal({ triggerCategory, onClose }) {
     };
 
     fetchModal();
-  }, [triggerCategory]);
+  }, [triggerProductId]);
 
   const handleAdd = () => {
-    if (product) {
-      addItem(product);
-    }
+    if (product) addItem(product);
+    handleClose();
+  };
+
+  const handleDetails = () => {
+    if (product) onOpenProductDetails?.(product);
     handleClose();
   };
 
   const handleClose = () => {
     setVisible(false);
-    setTimeout(onClose, 300);
+    setTimeout(() => {
+      setModal(null);
+      setProduct(null);
+      onClose();
+    }, 300);
   };
 
   if (!modal || !visible) return null;
@@ -1893,10 +2426,8 @@ export default function AdModal({ triggerCategory, onClose }) {
         className={`${styles.modal} ${!visible ? styles.slideOut : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Шапка */}
         <div className={styles.header}>
           <div className={styles.headerLeft}>
-            <span className={styles.icon}>🎁</span>
             <div>
               <p className={styles.eyebrow}>Специально для вас</p>
               <h3 className={styles.title}>{modal.title}</h3>
@@ -1905,14 +2436,12 @@ export default function AdModal({ triggerCategory, onClose }) {
           <button className={styles.close} onClick={handleClose}>×</button>
         </div>
 
-        {/* Описание */}
         <p className={styles.desc}>{modal.description}</p>
 
-        {/* Товар */}
         {product && (
           <div className={styles.productRow}>
             <img
-              src={product.image_url || `https://picsum.photos/seed/${product.name}/80/80`}
+              src={product.imageUrl || `https://picsum.photos/seed/${product.name}/80/80`}
               alt={product.name}
               className={styles.productImg}
             />
@@ -1920,13 +2449,18 @@ export default function AdModal({ triggerCategory, onClose }) {
               <p className={styles.productName}>{product.name}</p>
               <p className={styles.productPrice}>{product.price} ₽</p>
             </div>
-            <button className={`btn btn-cherry btn-sm ${styles.addBtn}`} onClick={handleAdd}>
-              Добавить
-            </button>
           </div>
         )}
 
-        {/* Отклонить */}
+        <div className={styles.actions}>
+          <button className={`btn btn-cherry btn-sm ${styles.addBtn}`} onClick={handleAdd}>
+            Добавить в корзину
+          </button>
+          <button className={`btn btn-outline btn-sm ${styles.detailsBtn}`} onClick={handleDetails}>
+            Подробнее
+          </button>
+        </div>
+
         <button className={styles.dismiss} onClick={handleClose}>
           Не сейчас
         </button>
@@ -2072,8 +2606,15 @@ export default function AdModal({ triggerCategory, onClose }) {
   color: var(--cherry);
 }
 
-.addBtn {
-  flex-shrink: 0;
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.addBtn,
+.detailsBtn {
+  flex: 1;
 }
 
 .dismiss {
@@ -2099,11 +2640,94 @@ import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import styles from './Header.module.css';
 
+/* ── SVG иконки ── */
+const IconCatalog = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="7" height="7" rx="1"/>
+    <rect x="14" y="3" width="7" height="7" rx="1"/>
+    <rect x="3" y="14" width="7" height="7" rx="1"/>
+    <rect x="14" y="14" width="7" height="7" rx="1"/>
+  </svg>
+);
+
+const IconCart = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+    <line x1="3" y1="6" x2="21" y2="6"/>
+    <path d="M16 10a4 4 0 0 1-8 0"/>
+  </svg>
+);
+
+const IconUser = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+    <circle cx="12" cy="7" r="4"/>
+  </svg>
+);
+
+const IconAdmin = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+  </svg>
+);
+
+const IconLogout = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+    <polyline points="16 17 21 12 16 7"/>
+    <line x1="21" y1="12" x2="9" y2="12"/>
+  </svg>
+);
+
+const IconLogin = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+    <polyline points="10 17 15 12 10 7"/>
+    <line x1="15" y1="12" x2="3" y2="12"/>
+  </svg>
+);
+
+const IconRegister = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+    <circle cx="8.5" cy="7" r="4"/>
+    <line x1="20" y1="8" x2="20" y2="14"/>
+    <line x1="23" y1="11" x2="17" y2="11"/>
+  </svg>
+);
+
+const IconLogo = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+    <path d="M12 6c-2 0-3.5 1.5-4 3.5-.3 1.2 0 2.5 1 3.5s2 1.5 3 1.5 2-.5 3-1.5 1.3-2.3 1-3.5C15.5 7.5 14 6 12 6z"/>
+    <path d="M9 14c-1 1-1 3 0 4s3 1 3-1"/>
+    <path d="M15 14c1 1 1 3 0 4s-3 1-3-1"/>
+  </svg>
+);
+
+const IconBurger = ({ open }) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    {open ? (
+      <>
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </>
+    ) : (
+      <>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </>
+    )}
+  </svg>
+);
+
 export default function Header() {
   const { user, logout, isAdmin } = useAuth();
   const { totalCount } = useCart();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -2111,24 +2735,34 @@ export default function Header() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
   const isActive = (path) => location.pathname === path;
 
   return (
     <header className={`${styles.header} ${scrolled ? styles.scrolled : ''}`}>
       <div className={`${styles.inner} container`}>
-        {/* Логотип */}
-        <Link to="/" className={styles.logo}>
-          <span className={styles.logoIcon}>🍒</span>
+        <Link to="/" className={styles.logo} onClick={() => setMobileOpen(false)}>
           <span className={styles.logoText}>Фрукт Край</span>
         </Link>
 
-        {/* Навигация */}
-        <nav className={styles.nav}>
+        <button
+          className={styles.burger}
+          onClick={() => setMobileOpen((v) => !v)}
+          aria-label="Меню"
+        >
+          <IconBurger open={mobileOpen} />
+        </button>
+
+        <nav className={`${styles.nav} ${mobileOpen ? styles.navOpen : ''}`}>
           <Link
             to="/catalog"
             className={`${styles.navLink} ${isActive('/catalog') ? styles.active : ''}`}
           >
-            Каталог
+            <IconCatalog />
+            <span>Каталог</span>
           </Link>
 
           {user && (
@@ -2136,7 +2770,8 @@ export default function Header() {
               to="/cart"
               className={`${styles.navLink} ${isActive('/cart') ? styles.active : ''}`}
             >
-              Корзина
+              <IconCart />
+              <span>Корзина</span>
               {totalCount > 0 && (
                 <span className={styles.cartBadge}>{totalCount}</span>
               )}
@@ -2149,18 +2784,21 @@ export default function Header() {
                 to="/profile"
                 className={`${styles.navLink} ${isActive('/profile') ? styles.active : ''}`}
               >
-                Кабинет
+                <IconUser />
+                <span>Кабинет</span>
               </Link>
               {isAdmin && (
                 <Link
                   to="/admin"
                   className={`${styles.navLink} ${styles.adminLink} ${isActive('/admin') ? styles.active : ''}`}
                 >
-                  Админ
+                  <IconAdmin />
+                  <span>Админ</span>
                 </Link>
               )}
               <button className={styles.logoutBtn} onClick={logout}>
-                Выйти
+                <IconLogout />
+                <span>Выйти</span>
               </button>
             </>
           ) : (
@@ -2169,10 +2807,12 @@ export default function Header() {
                 to="/login"
                 className={`${styles.navLink} ${isActive('/login') ? styles.active : ''}`}
               >
-                Войти
+                <IconLogin />
+                <span>Войти</span>
               </Link>
-              <Link to="/register" className="btn btn-cherry btn-sm">
-                Регистрация
+              <Link to="/register" className={`${styles.navLink} ${styles.registerLink}`}>
+                <IconRegister />
+                <span>Регистрация</span>
               </Link>
             </>
           )}
@@ -2191,7 +2831,7 @@ export default function Header() {
   right: 0;
   z-index: 1000;
   height: 72px;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid transparent;
   transition: all 0.22s ease;
@@ -2214,11 +2854,14 @@ export default function Header() {
   align-items: center;
   gap: 10px;
   text-decoration: none;
+  flex-shrink: 0;
 }
 
 .logoIcon {
-  font-size: 28px;
-  filter: drop-shadow(0 2px 4px rgba(139, 26, 46, 0.3));
+  color: var(--cherry);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .logoText {
@@ -2229,6 +2872,25 @@ export default function Header() {
   letter-spacing: -0.5px;
 }
 
+/* Бургер — скрыт на десктопе */
+.burger {
+  display: none;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--gray-700);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+}
+
+.burger:hover {
+  background: var(--cherry-pale);
+  color: var(--cherry);
+}
+
+/* Навигация десктоп */
 .nav {
   display: flex;
   align-items: center;
@@ -2237,6 +2899,9 @@ export default function Header() {
 
 .navLink {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 14px;
   font-size: 15px;
   font-weight: 500;
@@ -2266,33 +2931,27 @@ export default function Header() {
   border-radius: 1px;
 }
 
-.cartBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  background: var(--cherry);
-  color: white;
-  font-size: 11px;
-  font-weight: 700;
-  border-radius: 50%;
-  margin-left: 6px;
-  animation: badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes badge-pop {
-  from { transform: scale(0); }
-  to   { transform: scale(1); }
-}
-
 .adminLink {
-  color: var(--cherry) !important;
+  color: var(--cherry);
   background: var(--cherry-pale);
   border: 1px solid var(--cherry-border);
 }
 
+.registerLink {
+  background: var(--cherry);
+  color: white;
+  box-shadow: 0 4px 14px rgba(139, 26, 46, 0.35);
+}
+
+.registerLink:hover {
+  background: var(--cherry-dark);
+  color: white;
+}
+
 .logoutBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 14px;
   font-size: 15px;
   font-weight: 500;
@@ -2305,6 +2964,82 @@ export default function Header() {
 .logoutBtn:hover {
   color: var(--cherry);
   background: var(--cherry-pale);
+}
+
+.cartBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--cherry);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 10px;
+  margin-left: 2px;
+  animation: badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes badge-pop {
+  from { transform: scale(0); }
+  to   { transform: scale(1); }
+}
+
+/* ── Мобильная адаптивность ── */
+@media (max-width: 768px) {
+  .burger {
+    display: flex;
+  }
+
+  .nav {
+    position: absolute;
+    top: 72px;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--cherry-border);
+    box-shadow: 0 8px 24px rgba(139, 26, 46, 0.12);
+    padding: 8px 16px 16px;
+    transform: translateY(-10px);
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    transition: all 0.25s ease;
+  }
+
+  .navOpen {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: all;
+    visibility: visible;
+  }
+
+  .navLink,
+  .logoutBtn {
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .navLink.active::after {
+    display: none;
+  }
+
+  .adminLink {
+    margin-top: 4px;
+  }
+
+  .registerLink {
+    margin-top: 4px;
+    justify-content: center;
+  }
 }
 </file>
 
@@ -2406,7 +3141,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import styles from './ProductCard.module.css';
 
-export default function ProductCard({ product, featured = false }) {
+export default function ProductCard({ product, featured = false, onAddToCart }) {
   const { addItem } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -2433,6 +3168,7 @@ export default function ProductCard({ product, featured = false }) {
     setTimeout(() => {
       setAdding(false);
       setAdded(true);
+      onAddToCart?.(product);
       setTimeout(() => setAdded(false), 1600);
     }, 250);
   };
@@ -2608,8 +3344,9 @@ export default function ProductCard({ product, featured = false }) {
 </file>
 
 <file path="frontend/src/components/ProductDetailsModal/ProductDetailsModal.jsx">
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useCart } from '../../context/CartContext';
+import { reviewsAPI } from '../../api';
 import styles from './ProductDetailsModal.module.css';
 
 const BASE_URL =
@@ -2621,8 +3358,19 @@ function resolveImage(url) {
   return `${BASE_URL}${url}`;
 }
 
-export default function ProductDetailsModal({ product, onClose }) {
+export default function ProductDetailsModal({ product, onClose, onAddToCart }) {
   const { addItem } = useCart();
+  const [reviews, setReviews] = useState([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+
+  useEffect(() => {
+    if (!product?.id) return;
+    setLoadingReviews(true);
+    reviewsAPI.getByProduct(product.id)
+      .then(({ data }) => setReviews(data.reviews || []))
+      .catch(() => setReviews([]))
+      .finally(() => setLoadingReviews(false));
+  }, [product?.id]);
 
   if (!product) return null;
 
@@ -2636,8 +3384,13 @@ export default function ProductDetailsModal({ product, onClose }) {
       categoryName: product.category?.name || '',
       categorySlug: product.category?.slug || '',
     });
+    onAddToCart?.(product);
     onClose();
   };
+
+  const avgRating = reviews.length
+    ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
+    : null;
 
   return (
     <div className={styles.overlay} onClick={onClose}>
@@ -2673,6 +3426,16 @@ export default function ProductDetailsModal({ product, onClose }) {
             {product.isDiscount && <span className="badge badge-new">Скидка</span>}
           </div>
 
+          {avgRating && (
+            <div className={styles.ratingRow}>
+              <span className={styles.ratingStars}>
+                {'★'.repeat(Math.round(Number(avgRating)))}
+              </span>
+              <span className={styles.ratingValue}>{avgRating}</span>
+              <span className={styles.ratingCount}>({reviews.length} отзывов)</span>
+            </div>
+          )}
+
           <div className={styles.footer}>
             <div className={styles.price}>
               {Number(product.price).toLocaleString('ru-RU')} ₽
@@ -2680,6 +3443,32 @@ export default function ProductDetailsModal({ product, onClose }) {
             <button className="btn btn-cherry btn-lg" onClick={handleAdd}>
               В корзину
             </button>
+          </div>
+
+          <div className={styles.reviewsSection}>
+            <h3 className={styles.reviewsTitle}>Отзывы</h3>
+            {loadingReviews ? (
+              <p className={styles.reviewsLoading}>Загружаем отзывы…</p>
+            ) : reviews.length === 0 ? (
+              <p className={styles.reviewsEmpty}>Пока нет отзывов. Будьте первым!</p>
+            ) : (
+              <div className={styles.reviewsList}>
+                {reviews.map((r) => (
+                  <div key={r.id} className={styles.reviewItem}>
+                    <div className={styles.reviewTop}>
+                      <span className={styles.reviewAuthor}>{r.user?.email?.split('@')[0] || 'Пользователь'}</span>
+                      <span className={styles.reviewItemStars}>
+                        {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
+                      </span>
+                    </div>
+                    <p className={styles.reviewItemComment}>{r.comment}</p>
+                    <p className={styles.reviewItemDate}>
+                      {new Date(r.createdAt).toLocaleDateString('ru-RU')}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2800,6 +3589,30 @@ export default function ProductDetailsModal({ product, onClose }) {
   flex-wrap: wrap;
 }
 
+.ratingRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.ratingStars {
+  color: #F59E0B;
+  font-size: 18px;
+  letter-spacing: 1px;
+}
+
+.ratingValue {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--gray-900);
+}
+
+.ratingCount {
+  font-size: 14px;
+  color: var(--gray-500);
+}
+
 .footer {
   margin-top: auto;
   padding-top: 16px;
@@ -2814,6 +3627,73 @@ export default function ProductDetailsModal({ product, onClose }) {
   font-size: 28px;
   font-weight: 800;
   color: var(--cherry);
+}
+
+/* Отзывы */
+.reviewsSection {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--gray-100);
+}
+
+.reviewsTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin-bottom: 12px;
+}
+
+.reviewsLoading,
+.reviewsEmpty {
+  font-size: 14px;
+  color: var(--gray-500);
+  padding: 8px 0;
+}
+
+.reviewsList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.reviewItem {
+  padding: 12px;
+  background: var(--gray-50);
+  border-radius: var(--radius-md);
+}
+
+.reviewTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.reviewAuthor {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gray-800);
+}
+
+.reviewItemStars {
+  color: #F59E0B;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.reviewItemComment {
+  font-size: 14px;
+  color: var(--gray-700);
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+.reviewItemDate {
+  font-size: 12px;
+  color: var(--gray-400);
 }
 
 @media (max-width: 680px) {
@@ -2832,6 +3712,210 @@ export default function ProductDetailsModal({ product, onClose }) {
     padding: 20px;
     max-height: none;
   }
+}
+</file>
+
+<file path="frontend/src/components/ReviewModal/ReviewModal.jsx">
+import React, { useState } from 'react';
+import { reviewsAPI } from '../../api';
+import styles from './ReviewModal.module.css';
+
+export default function ReviewModal({ product, order, onClose, onSuccess }) {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      await reviewsAPI.create({
+        productId: product.productId || product.id,
+        orderId: order.id,
+        rating,
+        comment,
+      });
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Ошибка отправки отзыва');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className={styles.overlay} onClick={onClose}>
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <button className={styles.closeBtn} onClick={onClose}>×</button>
+
+        <h3 className={styles.title}>Оставить отзыв</h3>
+        <p className={styles.subtitle}>{product.name}</p>
+
+        <form onSubmit={handleSubmit}>
+          <div className={styles.stars}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={star}
+                type="button"
+                className={`${styles.star} ${star <= rating ? styles.starActive : ''}`}
+                onClick={() => setRating(star)}
+              >
+                ★
+              </button>
+            ))}
+          </div>
+
+          <textarea
+            className={styles.textarea}
+            placeholder="Расскажите о товаре..."
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={4}
+            required
+          />
+
+          {error && <p className={styles.error}>{error}</p>}
+
+          <button type="submit" className={`btn btn-cherry ${styles.submit}`} disabled={loading}>
+            {loading ? 'Отправляем...' : 'Отправить отзыв'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="frontend/src/components/ReviewModal/ReviewModal.module.css">
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(3px);
+  animation: fadeOverlay 0.2s ease;
+}
+
+@keyframes fadeOverlay {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal {
+  position: relative;
+  width: min(480px, 100%);
+  background: #fff;
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.2);
+  animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.9) translateY(20px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.closeBtn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--gray-700);
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.closeBtn:hover {
+  background: var(--cherry);
+  color: #fff;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: var(--gray-900);
+  margin-bottom: 4px;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--gray-600);
+  margin-bottom: 20px;
+}
+
+.stars {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.star {
+  font-size: 36px;
+  color: var(--gray-200);
+  background: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.star:hover {
+  transform: scale(1.15);
+}
+
+.starActive {
+  color: #F59E0B;
+}
+
+.textarea {
+  width: 100%;
+  padding: 14px;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 14px;
+  font-family: var(--font-main);
+  font-size: 15px;
+  resize: vertical;
+  min-height: 100px;
+  outline: none;
+  transition: all var(--transition);
+  margin-bottom: 16px;
+}
+
+.textarea:focus {
+  border-color: var(--cherry);
+  box-shadow: 0 0 0 3px rgba(139, 26, 46, 0.08);
+}
+
+.error {
+  color: #ef4444;
+  font-size: 14px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: #fef2f2;
+  border-radius: var(--radius-sm);
+  border: 1px solid #fecaca;
+}
+
+.submit {
+  width: 100%;
+  justify-content: center;
+  padding: 14px;
+  font-size: 16px;
 }
 </file>
 
@@ -2859,7 +3943,7 @@ const SLIDER_SETTINGS = {
   ],
 };
 
-export default function ProductSlider({ title, subtitle, params, featured = false }) {
+export default function ProductSlider({ title, subtitle, params, featured = false, onAddToCart }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -2897,7 +3981,7 @@ export default function ProductSlider({ title, subtitle, params, featured = fals
           <Slider {...SLIDER_SETTINGS}>
             {products.map((p) => (
               <div key={p.id} className={styles.slide}>
-                <ProductCard product={p} featured={featured && p.is_day_item} />
+                <ProductCard product={p} featured={featured && p.is_day_item} onAddToCart={onAddToCart} />
               </div>
             ))}
           </Slider>
@@ -2953,7 +4037,7 @@ export default function ProductSlider({ title, subtitle, params, featured = fals
 
 <file path="frontend/src/context/AuthContext.js">
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { authAPI } from '../api';
+import { authAPI, userAPI } from '../api';
 
 const AuthContext = createContext(null);
 
@@ -2989,10 +4073,21 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const { data } = await userAPI.getProfile();
+      localStorage.setItem('user', JSON.stringify(data));
+      setUser(data);
+      return data;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const isAdmin = ['ADMIN', 'MODERATOR'].includes(user?.role);
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isAdmin }}>
+    <AuthContext.Provider value={{ user, login, register, logout, refreshUser, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );
@@ -3003,6 +4098,8 @@ export const useAuth = () => useContext(AuthContext);
 
 <file path="frontend/src/context/CartContext.js">
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { cartAPI } from '../api';
+import { useAuth } from './AuthContext';
 
 const CartContext = createContext(null);
 
@@ -3019,7 +4116,20 @@ function normalizeProduct(product) {
   };
 }
 
+function toServerItem(item) {
+  return {
+    productId: item.id,
+    name: item.name,
+    price: item.price,
+    quantity: item.quantity,
+    imageUrl: item.image_url || '',
+    categoryName: item.categoryName || '',
+    categorySlug: item.categorySlug || '',
+  };
+}
+
 export function CartProvider({ children }) {
+  const { user } = useAuth();
   const [items, setItems] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('cart') || '[]');
@@ -3028,40 +4138,102 @@ export function CartProvider({ children }) {
     }
   });
 
+  // Загрузка корзины с сервера при логине
+  useEffect(() => {
+    if (!user) return;
+    const loadServerCart = async () => {
+      try {
+        const { data } = await cartAPI.getAll();
+        if (data.items) {
+          const mapped = data.items.map((i) => ({
+            id: i.productId,
+            name: i.name,
+            price: i.price,
+            quantity: i.quantity,
+            image_url: i.imageUrl,
+            categoryName: i.categoryName,
+            categorySlug: i.categorySlug,
+            category: { name: i.categoryName, slug: i.categorySlug },
+          }));
+          setItems(mapped);
+          localStorage.setItem('cart', JSON.stringify(mapped));
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки корзины:', err);
+      }
+    };
+    loadServerCart();
+  }, [user?.id]);
+
+  // Сохранение в localStorage
   useEffect(() => {
     localStorage.setItem('cart', JSON.stringify(items));
   }, [items]);
+
+  // Синхронизация с сервером
+  const syncWithServer = useCallback(async (nextItems) => {
+    if (!user) return;
+    try {
+      await cartAPI.sync(nextItems.map(toServerItem));
+    } catch (err) {
+      console.error('Ошибка синхронизации корзины:', err);
+      if (err.response?.data?.error?.includes('больше не существует')) {
+        setItems([]);
+        localStorage.removeItem('cart');
+        await cartAPI.clear().catch(() => {});
+      }
+    }
+  }, [user]);
 
   const addItem = useCallback((product, qty = 1) => {
     const normalized = normalizeProduct(product);
 
     setItems((prev) => {
       const existing = prev.find((i) => i.id === normalized.id);
+      let next;
       if (existing) {
-        return prev.map((i) =>
+        next = prev.map((i) =>
           i.id === normalized.id ? { ...i, quantity: i.quantity + qty } : i
         );
+      } else {
+        next = [...prev, { ...normalized, quantity: qty }];
       }
-      return [...prev, { ...normalized, quantity: qty }];
+      syncWithServer(next);
+      return next;
     });
-  }, []);
+  }, [syncWithServer]);
 
   const removeItem = useCallback((productId) => {
-    setItems((prev) => prev.filter((i) => i.id !== productId));
-  }, []);
+    setItems((prev) => {
+      const next = prev.filter((i) => i.id !== productId);
+      syncWithServer(next);
+      return next;
+    });
+  }, [syncWithServer]);
 
   const updateQty = useCallback((productId, qty) => {
     if (qty <= 0) {
-      setItems((prev) => prev.filter((i) => i.id !== productId));
+      setItems((prev) => {
+        const next = prev.filter((i) => i.id !== productId);
+        syncWithServer(next);
+        return next;
+      });
       return;
     }
 
-    setItems((prev) =>
-      prev.map((i) => (i.id === productId ? { ...i, quantity: qty } : i))
-    );
-  }, []);
+    setItems((prev) => {
+      const next = prev.map((i) => (i.id === productId ? { ...i, quantity: qty } : i));
+      syncWithServer(next);
+      return next;
+    });
+  }, [syncWithServer]);
 
-  const clearCart = useCallback(() => setItems([]), []);
+  const clearCart = useCallback(() => {
+    setItems([]);
+    if (user) {
+      cartAPI.clear().catch(() => {});
+    }
+  }, [user]);
 
   const totalPrice = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const totalCount = items.reduce((sum, i) => sum + i.quantity, 0);
@@ -3102,7 +4274,7 @@ root.render(
 
 <file path="frontend/src/pages/Admin/AdminPage.jsx">
 import React, { useEffect, useRef, useState } from 'react';
-import { adminAPI, categoriesAPI, productsAPI, uploadAPI } from '../../api';
+import { adminAPI, categoriesAPI, productsAPI, uploadAPI, deliveryReviewsAPI } from '../../api';
 import styles from './AdminPage.module.css';
 
 const BASE_URL = process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:8080';
@@ -3117,7 +4289,7 @@ const EMPTY_PRODUCT = {
 const EMPTY_CATEGORY = { name: '' };
 
 const EMPTY_MODAL = {
-  triggerCategoryId: '', title: '',
+  triggerProductId: '', title: '',
   description: '', productId: '', isActive: true,
 };
 
@@ -3134,11 +4306,14 @@ function unwrapArr(data) {
 
 export default function AdminPage() {
   const [tab, setTab]           = useState('products');
+  const [tabsOpen, setTabsOpen] = useState(false);
   const [loading, setLoading]   = useState(true);
 
   const [products, setProducts]     = useState([]);
   const [categories, setCategories] = useState([]);
   const [modals, setModals]         = useState([]);
+  const [deliveryReviews, setDeliveryReviews] = useState([]);
+  const [deliveryStats, setDeliveryStats]     = useState(null);
 
   const [productForm, setProductForm]     = useState(EMPTY_PRODUCT);
   const [categoryForm, setCategoryForm]   = useState(EMPTY_CATEGORY);
@@ -3158,10 +4333,11 @@ export default function AdminPage() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [pRes, cRes, mRes] = await Promise.all([
-        productsAPI.getAll({ limit: 200 }),
+      const [pRes, cRes, mRes, dRes] = await Promise.all([
+        productsAPI.getAll({ limit: 100 }),
         categoriesAPI.getAdminAll(),
         adminAPI.getAdModals(),
+        deliveryReviewsAPI.getAll(),
       ]);
 
       const p = unwrapArr(pRes.data);
@@ -3171,6 +4347,8 @@ export default function AdminPage() {
       setProducts(p);
       setCategories(c);
       setModals(m);
+      setDeliveryReviews(dRes.data.reviews || []);
+      setDeliveryStats(dRes.data.stats || null);
 
       setProductForm((prev) =>
         prev.categoryId || c.length === 0
@@ -3180,8 +4358,8 @@ export default function AdminPage() {
 
       setModalForm((prev) => ({
         ...prev,
-        triggerCategoryId: prev.triggerCategoryId || c[0]?.id || '',
-        productId:         prev.productId         || p[0]?.id || '',
+        triggerProductId: prev.triggerProductId || p[0]?.id || '',
+        productId:        prev.productId        || p[0]?.id || '',
       }));
     } catch (err) {
       console.error('loadAll error:', err);
@@ -3192,7 +4370,10 @@ export default function AdminPage() {
 
   useEffect(() => { loadAll(); }, []);
 
-  // Загрузка изображения
+  useEffect(() => {
+    setTabsOpen(false);
+  }, [tab]);
+
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -3204,7 +4385,7 @@ export default function AdminPage() {
       const { data } = await uploadAPI.image(file);
       const fullUrl = `${BASE_URL}${data.url}`;
       setProductForm((prev) => ({ ...prev, imageUrl: fullUrl }));
-      flash(setProductMsg, 'Изображение загружено ✓');
+      flash(setProductMsg, 'Изображение загружено');
     } catch (err) {
       flash(setProductMsg, 'Ошибка загрузки изображения');
       console.error(err);
@@ -3246,10 +4427,10 @@ export default function AdminPage() {
     try {
       if (editProductId) {
         await adminAPI.updateProduct(editProductId, payload);
-        flash(setProductMsg, 'Товар обновлён ✓');
+        flash(setProductMsg, 'Товар обновлен');
       } else {
         await adminAPI.createProduct(payload);
-        flash(setProductMsg, 'Товар добавлен ✓');
+        flash(setProductMsg, 'Товар добавлен');
       }
       setProductForm(EMPTY_PRODUCT);
       setEditProductId(null);
@@ -3287,7 +4468,7 @@ export default function AdminPage() {
     if (!window.confirm('Удалить товар?')) return;
     try {
       await adminAPI.deleteProduct(id);
-      flash(setProductMsg, 'Товар удалён');
+      flash(setProductMsg, 'Товар удален');
       await loadAll();
     } catch (err) {
       flash(setProductMsg, `Ошибка: ${err.response?.data?.error || err.message}`);
@@ -3302,7 +4483,7 @@ export default function AdminPage() {
     try {
       await categoriesAPI.create({ name });
       setCategoryForm(EMPTY_CATEGORY);
-      flash(setCategoryMsg, 'Категория добавлена ✓');
+      flash(setCategoryMsg, 'Категория добавлена');
       await loadAll();
     } catch (err) {
       flash(setCategoryMsg, `Ошибка: ${err.response?.data?.error || err.message}`);
@@ -3322,21 +4503,21 @@ export default function AdminPage() {
 
   const handleModalSubmit = async (e) => {
     e.preventDefault();
-    if (!modalForm.triggerCategoryId || !modalForm.productId) {
-      flash(setModalMsg, 'Ошибка: выберите категорию и товар');
+    if (!modalForm.triggerProductId || !modalForm.productId) {
+      flash(setModalMsg, 'Ошибка: выберите товар-триггер и рекламируемый товар');
       return;
     }
 
     try {
       await adminAPI.createAdModal({
-        triggerCategoryId: modalForm.triggerCategoryId,
-        title:             modalForm.title.trim(),
-        description:       modalForm.description.trim(),
-        productId:         modalForm.productId,
-        isActive:          Boolean(modalForm.isActive),
+        triggerProductId: modalForm.triggerProductId,
+        title:            modalForm.title.trim(),
+        description:      modalForm.description.trim(),
+        productId:        modalForm.productId,
+        isActive:         Boolean(modalForm.isActive),
       });
       setModalForm(EMPTY_MODAL);
-      flash(setModalMsg, 'Попап создан ✓');
+      flash(setModalMsg, 'Попап создан');
       await loadAll();
     } catch (err) {
       flash(setModalMsg, `Ошибка: ${err.response?.data?.error || err.message}`);
@@ -3347,7 +4528,7 @@ export default function AdminPage() {
     if (!window.confirm('Удалить попап?')) return;
     try {
       await adminAPI.deleteAdModal(id);
-      flash(setModalMsg, 'Попап удалён');
+      flash(setModalMsg, 'Попап удален');
       await loadAll();
     } catch (err) {
       flash(setModalMsg, `Ошибка: ${err.response?.data?.error || err.message}`);
@@ -3366,10 +4547,9 @@ export default function AdminPage() {
     <div className={styles.page}>
       <div className="container">
 
-        {/* Header */}
         <div className={styles.adminHeader}>
           <div>
-            <h1 className={styles.adminTitle}>👑 Админ-панель</h1>
+            <h1 className={styles.adminTitle}>Админ-панель</h1>
             <p className={styles.adminSub}>Фрукт Край — управление магазином</p>
           </div>
           <div className={styles.stats}>
@@ -3388,37 +4568,55 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className={styles.tabs}>
-          {[
-            { key: 'products',   label: '🛍️ Товары' },
-            { key: 'categories', label: '📁 Категории' },
-            { key: 'modals',     label: '🎁 Реклама' },
-          ].map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              className={`${styles.tab} ${tab === t.key ? styles.activeTab : ''}`}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className={styles.tabsWrap}>
+          <button
+            className={styles.burger}
+            onClick={() => setTabsOpen((v) => !v)}
+            aria-label="Меню разделов"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {tabsOpen ? (
+                <>
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </>
+              ) : (
+                <>
+                  <line x1="3" y1="12" x2="21" y2="12"/>
+                  <line x1="3" y1="6" x2="21" y2="6"/>
+                  <line x1="3" y1="18" x2="21" y2="18"/>
+                </>
+              )}
+            </svg>
+          </button>
+
+          <div className={`${styles.tabs} ${tabsOpen ? styles.tabsOpen : ''}`}>
+            {[
+              { key: 'products',   label: 'Товары' },
+              { key: 'categories', label: 'Категории' },
+              { key: 'modals',     label: 'Реклама' },
+              { key: 'deliveryReviews', label: 'Отзывы о доставке' },
+            ].map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                className={`${styles.tab} ${tab === t.key ? styles.activeTab : ''}`}
+                onClick={() => setTab(t.key)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* ── ТОВАРЫ ── */}
         {tab === 'products' && (
           <div className={styles.tabContent}>
-
-            {/* Форма */}
             <div className={styles.formCard}>
               <h2 className={styles.formTitle}>
-                {editProductId ? '✏️ Редактировать товар' : '➕ Добавить товар'}
+                {editProductId ? 'Редактировать товар' : 'Добавить товар'}
               </h2>
 
               <form className={styles.form} onSubmit={handleProductSubmit}>
-
-                {/* Загрузка фото */}
                 <div className={styles.uploadSection}>
                   <div
                     className={styles.uploadArea}
@@ -3432,7 +4630,6 @@ export default function AdminPage() {
                       />
                     ) : (
                       <div className={styles.uploadPlaceholder}>
-                        <span className={styles.uploadIcon}>📷</span>
                         <p>Нажмите чтобы загрузить фото</p>
                         <span className={styles.uploadHint}>
                           JPG, PNG, WebP — до 5 МБ
@@ -3465,7 +4662,6 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Основные поля */}
                 <div className={styles.formGrid}>
                   <div className={styles.field}>
                     <label className={styles.label}>Название *</label>
@@ -3547,13 +4743,12 @@ export default function AdminPage() {
                   />
                 </div>
 
-                {/* Флаги */}
                 <div className={styles.flags}>
                   {[
-                    { name: 'isNew',      label: '✨ Новинка' },
-                    { name: 'isDiscount', label: '💰 Скидка' },
-                    { name: 'isPopular',  label: '🔥 Популярный' },
-                    { name: 'isDayItem',  label: '⭐ Товар дня' },
+                    { name: 'isNew',      label: 'Новинка' },
+                    { name: 'isDiscount', label: 'Скидка' },
+                    { name: 'isPopular',  label: 'Популярный' },
+                    { name: 'isDayItem',  label: 'Товар дня' },
                   ].map((f) => (
                     <label key={f.name} className={styles.checkboxLabel}>
                       <input
@@ -3597,7 +4792,6 @@ export default function AdminPage() {
               </form>
             </div>
 
-            {/* Таблица товаров */}
             <div className={styles.tableWrap}>
               <h2 className={styles.tableTitle}>
                 Все товары ({products.length})
@@ -3658,7 +4852,7 @@ export default function AdminPage() {
                           className={styles.deleteBtn}
                           onClick={() => handleDeleteProduct(p.id)}
                         >
-                          🗑️
+                          Удалить
                         </button>
                       </span>
                     </div>
@@ -3669,11 +4863,10 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── КАТЕГОРИИ ── */}
         {tab === 'categories' && (
           <div className={styles.tabContent}>
             <div className={styles.formCard}>
-              <h2 className={styles.formTitle}>➕ Добавить категорию</h2>
+              <h2 className={styles.formTitle}>Добавить категорию</h2>
 
               <form className={styles.form} onSubmit={handleCategorySubmit}>
                 <div className={styles.field}>
@@ -3736,7 +4929,7 @@ export default function AdminPage() {
                             className={styles.deleteBtn}
                             onClick={() => handleDeleteCategory(c.id)}
                           >
-                            🗑️
+                            Удалить
                           </button>
                         </span>
                       </div>
@@ -3748,31 +4941,30 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── РЕКЛАМА ── */}
         {tab === 'modals' && (
           <div className={styles.tabContent}>
             <div className={styles.formCard}>
-              <h2 className={styles.formTitle}>➕ Создать рекламный попап</h2>
+              <h2 className={styles.formTitle}>Создать рекламный попап</h2>
 
               <form className={styles.form} onSubmit={handleModalSubmit}>
                 <div className={styles.formGrid}>
                   <div className={styles.field}>
-                    <label className={styles.label}>Категория-триггер *</label>
+                    <label className={styles.label}>Товар-триггер *</label>
                     <select
-                      name="triggerCategoryId"
+                      name="triggerProductId"
                       className={styles.input}
-                      value={modalForm.triggerCategoryId}
+                      value={modalForm.triggerProductId}
                       onChange={(e) =>
                         setModalForm((p) => ({
                           ...p,
-                          triggerCategoryId: e.target.value,
+                          triggerProductId: e.target.value,
                         }))
                       }
                       required
                     >
-                      <option value="">— Выберите категорию —</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
+                      <option value="">— Выберите товар —</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
                   </div>
@@ -3870,8 +5062,8 @@ export default function AdminPage() {
                 <div className={styles.table}>
                   <div className={`${styles.tableHead} ${styles.modalHead}`}>
                     <span>Заголовок</span>
-                    <span>Категория</span>
-                    <span>Товар</span>
+                    <span>Триггер</span>
+                    <span>Рекламирует</span>
                     <span>Статус</span>
                     <span>Действия</span>
                   </div>
@@ -3886,7 +5078,7 @@ export default function AdminPage() {
                       </span>
 
                       <span className={styles.catCell}>
-                        {m.triggerCategory?.name || '—'}
+                        {m.triggerProduct?.name || '—'}
                       </span>
 
                       <span className={styles.catCell}>
@@ -3907,8 +5099,86 @@ export default function AdminPage() {
                           className={styles.deleteBtn}
                           onClick={() => handleDeleteModal(m.id)}
                         >
-                          🗑️
+                          Удалить
                         </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {tab === 'deliveryReviews' && (
+          <div className={styles.tabContent}>
+            {deliveryStats && (
+              <div className={styles.statsCard}>
+                <h2 className={styles.statsTitle}>Статистика доставки</h2>
+                <div className={styles.statsRow}>
+                  <div className={styles.statBox}>
+                    <span className={styles.statBig}>{deliveryStats.avg}</span>
+                    <span className={styles.statSmall}>Средний рейтинг / 5</span>
+                  </div>
+                  <div className={styles.statBox}>
+                    <span className={styles.statBig}>{deliveryStats.total}</span>
+                    <span className={styles.statSmall}>Всего отзывов</span>
+                  </div>
+                </div>
+
+                <div className={styles.chart}>
+                  {deliveryStats.distribution.map((d) => {
+                    const pct = deliveryStats.total
+                      ? Math.round((d.count / deliveryStats.total) * 100)
+                      : 0;
+                    return (
+                      <div key={d.rating} className={styles.chartRow}>
+                        <span className={styles.chartLabel}>{d.rating} ★</span>
+                        <div className={styles.chartBarWrap}>
+                          <div
+                            className={styles.chartBar}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className={styles.chartValue}>{d.count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className={styles.tableWrap}>
+              <h2 className={styles.tableTitle}>
+                Все отзывы ({deliveryReviews.length})
+              </h2>
+
+              {deliveryReviews.length === 0 ? (
+                <p className={styles.empty}>Отзывов пока нет</p>
+              ) : (
+                <div className={styles.table}>
+                  <div className={`${styles.tableHead} ${styles.reviewHead}`}>
+                    <span>Заказ</span>
+                    <span>Пользователь</span>
+                    <span>Рейтинг</span>
+                    <span>Комментарий</span>
+                    <span>Дата</span>
+                  </div>
+
+                  {deliveryReviews.map((r) => (
+                    <div key={r.id} className={`${styles.tableRow} ${styles.reviewRow}`}>
+                      <span className={styles.productName}>
+                        #{r.order?.id?.slice(-6).toUpperCase() || '—'}
+                      </span>
+                      <span className={styles.catCell}>{r.user?.email || '—'}</span>
+                      <span className={styles.starCell}>
+                        {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
+                      </span>
+                      <span className={styles.productDesc}>{r.comment}</span>
+                      <span className={styles.dateCell}>
+                        {r.createdAt
+                          ? new Date(r.createdAt).toLocaleDateString('ru-RU')
+                          : '—'}
                       </span>
                     </div>
                   ))}
@@ -4008,11 +5278,34 @@ export default function AdminPage() {
   letter-spacing: 0.6px;
 }
 
+/* ── Табы с бургером ─────────────────────────── */
+.tabsWrap {
+  position: relative;
+  margin-bottom: 28px;
+}
+
+.burger {
+  display: none;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--gray-700);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+  margin-bottom: 12px;
+}
+
+.burger:hover {
+  background: var(--cherry-pale);
+  color: var(--cherry);
+}
+
 .tabs {
   display: flex;
   gap: 6px;
   border-bottom: 2px solid var(--gray-200);
-  margin-bottom: 28px;
   overflow-x: auto;
   padding-bottom: 2px;
 }
@@ -4182,6 +5475,8 @@ export default function AdminPage() {
   border-radius: var(--radius-xl);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tableTitle {
@@ -4193,6 +5488,7 @@ export default function AdminPage() {
 
 .table {
   margin-top: 18px;
+  min-width: 720px;
 }
 
 .tableHead,
@@ -4293,23 +5589,22 @@ export default function AdminPage() {
 }
 
 .deleteBtn {
-  width: 36px;
-  height: 36px;
+  padding: 8px 14px;
   border-radius: 12px;
   background: #fef2f2;
   color: #dc2626;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
+  font-size: 13px;
+  font-weight: 600;
   transition: all var(--transition);
   border: 1px solid #fecaca;
+  white-space: nowrap;
 }
 
 .deleteBtn:hover {
   background: #fee2e2;
   transform: translateY(-1px);
 }
+
 
 @media (max-width: 1100px) {
   .tableHead,
@@ -4373,6 +5668,75 @@ export default function AdminPage() {
     font-size: 28px;
   }
 
+  .adminHeader {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .stats {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .statCard {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .burger {
+    display: inline-flex;
+  }
+
+  .tabs {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    z-index: 100;
+    flex-direction: column;
+    gap: 0;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(12px);
+    border: 1.5px solid var(--cherry-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 8px;
+    transform: translateY(-10px);
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    transition: all 0.25s ease;
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+
+  .tabsOpen {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: all;
+    visibility: visible;
+  }
+
+  .tab {
+    border-radius: var(--radius-md);
+    border-bottom: none;
+    margin-bottom: 0;
+    text-align: left;
+    padding: 12px 16px;
+    white-space: normal;
+  }
+
+  .tab:hover {
+    background: var(--cherry-pale);
+  }
+
+  .activeTab {
+    border-bottom-color: transparent !important;
+    background: var(--cherry-pale) !important;
+    box-shadow: none !important;
+  }
+
   .formCard {
     padding: 20px;
   }
@@ -4390,6 +5754,118 @@ export default function AdminPage() {
   .statNum {
     font-size: 24px;
   }
+
+  .tableHead,
+  .tableRow {
+    padding: 10px 14px;
+  }
+}
+
+/* Статистика доставки */
+.statsCard {
+  background: #fff;
+  border: 1.5px solid var(--cherry-border);
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  margin-bottom: 28px;
+  box-shadow: var(--shadow-sm);
+}
+
+.statsTitle {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--gray-900);
+  margin-bottom: 20px;
+}
+
+.statsRow {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.statBox {
+  min-width: 140px;
+  padding: 16px 20px;
+  background: var(--cherry-pale);
+  border: 1px solid var(--cherry-border);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.statBig {
+  display: block;
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--cherry);
+  line-height: 1;
+}
+
+.statSmall {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-600);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Диаграмма */
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chartRow {
+  display: grid;
+  grid-template-columns: 60px 1fr 40px;
+  align-items: center;
+  gap: 12px;
+}
+
+.chartLabel {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gray-800);
+}
+
+.chartBarWrap {
+  height: 20px;
+  background: var(--gray-100);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.chartBar {
+  height: 100%;
+  background: var(--cherry);
+  border-radius: 10px;
+  transition: width 0.6s ease;
+}
+
+.chartValue {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gray-700);
+  text-align: right;
+}
+
+/* Отзывы таблица */
+.reviewHead {
+  grid-template-columns: 100px 180px 100px 1fr 110px !important;
+}
+
+.reviewRow {
+  grid-template-columns: 100px 180px 100px 1fr 110px !important;
+}
+
+.starCell {
+  color: #F59E0B;
+  font-size: 14px;
+  letter-spacing: 1px;
 }
 </file>
 
@@ -4763,9 +6239,7 @@ export default function CartPage() {
                 <div className={styles.itemInfo}>
                   <h3 className={styles.itemName}>{item.name}</h3>
                   <p className={styles.itemCategory}>
-                    {item.category === 'vegetables' ? '🥕 Овощи' :
-                     item.category === 'fruits'     ? '🍎 Фрукты' :
-                                                      '🍰 Десерты'}
+                    {item.categoryName || 'Категория'}
                   </p>
                 </div>
 
@@ -4869,16 +6343,19 @@ export default function CartPage() {
   align-items: start;
 }
 
-/* Список */
+/* ── Список ── */
 .listHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .clearBtn {
   color: #EF4444 !important;
+  flex-shrink: 0;
 }
 .clearBtn:hover {
   background: #FEF2F2 !important;
@@ -4925,6 +6402,7 @@ export default function CartPage() {
   font-weight: 600;
   color: var(--gray-900);
   margin-bottom: 4px;
+  line-height: 1.3;
 }
 
 .itemCategory {
@@ -4936,10 +6414,11 @@ export default function CartPage() {
 .qtyControl {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background: var(--gray-100);
   border-radius: var(--radius-md);
   padding: 4px;
+  flex-shrink: 0;
 }
 
 .qtyBtn {
@@ -4948,13 +6427,14 @@ export default function CartPage() {
   border-radius: var(--radius-sm);
   background: var(--white);
   color: var(--cherry);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all var(--transition);
   box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
 }
 
 .qtyBtn:hover {
@@ -4963,7 +6443,7 @@ export default function CartPage() {
 }
 
 .qtyValue {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   min-width: 24px;
   text-align: center;
@@ -4974,8 +6454,9 @@ export default function CartPage() {
   font-size: 18px;
   font-weight: 800;
   color: var(--cherry);
-  min-width: 100px;
+  min-width: 90px;
   text-align: right;
+  flex-shrink: 0;
 }
 
 .removeBtn {
@@ -4989,6 +6470,7 @@ export default function CartPage() {
   align-items: center;
   justify-content: center;
   transition: all var(--transition);
+  flex-shrink: 0;
 }
 
 .removeBtn:hover {
@@ -4996,7 +6478,7 @@ export default function CartPage() {
   color: #EF4444;
 }
 
-/* Итог */
+/* ── Итог ── */
 .summary {
   background: var(--white);
   border: 1.5px solid var(--cherry-border);
@@ -5060,16 +6542,135 @@ export default function CartPage() {
   color: var(--cherry);
 }
 
-@media (max-width: 768px) {
-  .layout { grid-template-columns: 1fr; }
-  .summary { position: static; }
+/* ═══════════════════════════════════════
+   АДАПТИВ
+   ═══════════════════════════════════════ */
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .summary {
+    position: static;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 24px 0 60px;
+  }
+
+  .listHeader {
+    margin-bottom: 16px;
+  }
+
+  .cartItem {
+    gap: 12px;
+    padding: 14px;
+    flex-wrap: wrap;
+  }
+
+  .itemImg {
+    width: 56px;
+    height: 56px;
+  }
+
+  .itemInfo {
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .itemName {
+    font-size: 14px;
+  }
+
+  .itemCategory {
+    font-size: 12px;
+  }
+
+  .qtyControl {
+    gap: 8px;
+    order: 3;
+    margin-left: auto;
+  }
+
+  .qtyBtn {
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+  }
+
+  .qtyValue {
+    font-size: 14px;
+    min-width: 20px;
+  }
+
+  .itemPrice {
+    font-size: 16px;
+    min-width: auto;
+    order: 2;
+    margin-left: auto;
+  }
+
+  .removeBtn {
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
+    order: 4;
+  }
+
+  .summary {
+    padding: 20px;
+  }
+
+  .summaryTitle {
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+
+  .summaryRow {
+    font-size: 14px;
+  }
+
+  .totalRow {
+    font-size: 18px;
+  }
+
+  .checkoutBtn {
+    padding: 14px;
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 380px) {
+  .cartItem {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .itemImg {
+    width: 48px;
+    height: 48px;
+  }
+
+  .itemName {
+    font-size: 13px;
+  }
+
+  .itemPrice {
+    font-size: 15px;
+  }
 }
 </file>
 
 <file path="frontend/src/pages/Catalog/CatalogPage.jsx">
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { categoriesAPI, productsAPI } from '../../api';
 import ProductDetailsModal from '../../components/ProductDetailsModal/ProductDetailsModal';
+import AdModal from '../../components/AdModal/AdModal';
 import styles from './CatalogPage.module.css';
 
 const BASE_URL =
@@ -5081,6 +6682,14 @@ function resolveImage(url) {
   return `${BASE_URL}${url}`;
 }
 
+const SORT_OPTIONS = [
+  { value: 'default', label: 'По умолчанию' },
+  { value: 'popular', label: 'Популярные' },
+  { value: 'new', label: 'Новинки' },
+  { value: 'cheap', label: 'Сначала дешевле' },
+  { value: 'expensive', label: 'Сначала дороже' },
+];
+
 export default function CatalogPage() {
   const [categories, setCategories] = useState([]);
   const [products, setProducts]     = useState([]);
@@ -5088,8 +6697,25 @@ export default function CatalogPage() {
   const [search, setSearch]         = useState('');
   const [minPrice, setMinPrice]     = useState('');
   const [maxPrice, setMaxPrice]     = useState('');
+  const [sort, setSort]             = useState('default');
   const [selected, setSelected]     = useState(null);
   const [loading, setLoading]       = useState(true);
+  const [adModalProductId, setAdModalProductId] = useState(null);
+
+  const [catOpen, setCatOpen]       = useState(false);
+  const [sortOpen, setSortOpen]     = useState(false);
+
+  const catRef  = useRef(null);
+  const sortRef = useRef(null);
+
+  useEffect(() => {
+    const onClick = (e) => {
+      if (catRef.current && !catRef.current.contains(e.target))  setCatOpen(false);
+      if (sortRef.current && !sortRef.current.contains(e.target)) setSortOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
 
   useEffect(() => {
     categoriesAPI.getAll().then(({ data }) => {
@@ -5102,11 +6728,12 @@ export default function CatalogPage() {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const params = { page: 1, limit: 200 };
+        const params = { page: 1, limit: 100 };
         if (categorySlug !== 'all') params.categorySlug = categorySlug;
         if (search.trim())  params.search   = search.trim();
         if (minPrice)       params.minPrice = Number(minPrice);
         if (maxPrice)       params.maxPrice = Number(maxPrice);
+        if (sort !== 'default') params.sort = sort;
 
         const { data } = await productsAPI.getAll(params);
         const list = Array.isArray(data) ? data : data?.products ?? [];
@@ -5120,7 +6747,21 @@ export default function CatalogPage() {
     }, 300);
 
     return () => clearTimeout(t);
-  }, [categorySlug, search, minPrice, maxPrice]);
+  }, [categorySlug, search, minPrice, maxPrice, sort]);
+
+  const activeCategoryName = categorySlug === 'all'
+    ? 'Все категории'
+    : categories.find((c) => c.slug === categorySlug)?.name || 'Категория';
+
+  const activeSortLabel = SORT_OPTIONS.find((s) => s.value === sort)?.label || 'Сортировка';
+
+  const handleAddToCart = (product) => {
+    setAdModalProductId(product.id);
+  };
+
+  const handleOpenProductDetails = (product) => {
+    setSelected(product);
+  };
 
   return (
     <div className={styles.page}>
@@ -5128,61 +6769,101 @@ export default function CatalogPage() {
         <h1 className="section-title">Каталог</h1>
         <p className="section-subtitle">Свежие товары с доставкой</p>
 
-        {/* Фильтры */}
         <div className={styles.filters}>
           <input
             className={styles.input}
-            placeholder="🔍 Поиск..."
+            placeholder="Поиск..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
 
-          <div className={styles.chips}>
-            <button
-              type="button"
-              className={`${styles.chip} ${categorySlug === 'all' ? styles.active : ''}`}
-              onClick={() => setCategorySlug('all')}
-            >
-              Все
-            </button>
-            {categories.map((c) => (
+          <div className={styles.filterRow}>
+            <div className={styles.dropdown} ref={sortRef}>
               <button
-                key={c.id}
                 type="button"
-                className={`${styles.chip} ${categorySlug === c.slug ? styles.active : ''}`}
-                onClick={() => setCategorySlug(c.slug)}
+                className={`${styles.dropdownTrigger} ${sortOpen ? styles.dropdownTriggerOpen : ''}`}
+                onClick={() => setSortOpen((v) => !v)}
               >
-                {c.name}
+                <span className={styles.dropdownLabel}>{activeSortLabel}</span>
+                <span className={styles.dropdownArrow}>▾</span>
               </button>
-            ))}
-          </div>
 
-          <div className={styles.priceRow}>
-            <input
-              className={styles.smallInput}
-              placeholder="От ₽"
-              type="number"
-              value={minPrice}
-              onChange={(e) => setMinPrice(e.target.value)}
-            />
-            <input
-              className={styles.smallInput}
-              placeholder="До ₽"
-              type="number"
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value)}
-            />
+              {sortOpen && (
+                <div className={styles.dropdownMenu}>
+                  {SORT_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`${styles.dropdownItem} ${sort === opt.value ? styles.dropdownItemActive : ''}`}
+                      onClick={() => { setSort(opt.value); setSortOpen(false); }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className={styles.dropdown} ref={catRef}>
+              <button
+                type="button"
+                className={`${styles.dropdownTrigger} ${catOpen ? styles.dropdownTriggerOpen : ''}`}
+                onClick={() => setCatOpen((v) => !v)}
+              >
+                <span className={styles.dropdownLabel}>{activeCategoryName}</span>
+                <span className={styles.dropdownArrow}>▾</span>
+              </button>
+
+              {catOpen && (
+                <div className={styles.dropdownMenu}>
+                  <button
+                    type="button"
+                    className={`${styles.dropdownItem} ${categorySlug === 'all' ? styles.dropdownItemActive : ''}`}
+                    onClick={() => { setCategorySlug('all'); setCatOpen(false); }}
+                  >
+                    Все категории
+                  </button>
+                  {categories.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={`${styles.dropdownItem} ${categorySlug === c.slug ? styles.dropdownItemActive : ''}`}
+                      onClick={() => { setCategorySlug(c.slug); setCatOpen(false); }}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className={styles.priceWrap}>
+              <input
+                className={styles.smallInput}
+                placeholder="От ₽"
+                type="number"
+                value={minPrice}
+                onChange={(e) => setMinPrice(e.target.value)}
+              />
+              <span className={styles.priceDash}>—</span>
+              <input
+                className={styles.smallInput}
+                placeholder="До ₽"
+                type="number"
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Список */}
         {loading ? (
           <div className={styles.loadingWrap}>
             <div className={styles.spinner} />
           </div>
         ) : products.length === 0 ? (
           <div className={styles.emptyWrap}>
-            <span>🥕</span>
+            <span></span>
             <p>Товары не найдены</p>
           </div>
         ) : (
@@ -5237,6 +6918,13 @@ export default function CatalogPage() {
       <ProductDetailsModal
         product={selected}
         onClose={() => setSelected(null)}
+        onAddToCart={handleAddToCart}
+      />
+
+      <AdModal
+        triggerProductId={adModalProductId}
+        onClose={() => setAdModalProductId(null)}
+        onOpenProductDetails={handleOpenProductDetails}
       />
     </div>
   );
@@ -5248,6 +6936,7 @@ export default function CatalogPage() {
   padding: 36px 0 80px;
 }
 
+/* ── Фильтры ────────────────────────────── */
 .filters {
   display: flex;
   flex-direction: column;
@@ -5272,42 +6961,118 @@ export default function CatalogPage() {
   box-shadow: 0 0 0 3px rgba(139, 26, 46, 0.08);
 }
 
-.chips {
+/* Ряд с dropdown + цена */
+.filterRow {
   display: flex;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
-  gap: 8px;
 }
 
-.chip {
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: 1.5px solid var(--gray-200);
+/* ── Dropdown ───────────────────────────── */
+.dropdown {
+  position: relative;
+  min-width: 180px;
+}
+
+.dropdownTrigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
   background: #fff;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 12px;
+  font-family: var(--font-main);
   font-size: 14px;
   font-weight: 500;
-  color: var(--gray-700);
+  color: var(--gray-900);
+  cursor: pointer;
   transition: all var(--transition);
+  white-space: nowrap;
 }
 
-.chip:hover {
+.dropdownTrigger:hover {
+  border-color: var(--cherry-border);
+}
+
+.dropdownTriggerOpen {
   border-color: var(--cherry);
+  box-shadow: 0 0 0 3px rgba(139, 26, 46, 0.08);
+}
+
+.dropdownLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdownArrow {
+  font-size: 12px;
+  color: var(--gray-500);
+  transition: transform var(--transition);
+}
+
+.dropdownTriggerOpen .dropdownArrow {
+  transform: rotate(180deg);
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  min-width: 100%;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1.5px solid var(--cherry-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  animation: dropdownIn 0.18s ease;
+}
+
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dropdownItem {
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gray-800);
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.dropdownItem:hover {
+  background: var(--cherry-pale);
   color: var(--cherry);
 }
 
-.active {
-  background: var(--cherry);
-  border-color: var(--cherry);
-  color: #fff;
-  font-weight: 600;
+.dropdownItemActive {
+  background: var(--cherry-pale);
+  color: var(--cherry);
+  font-weight: 700;
 }
 
-.priceRow {
+/* ── Цена ───────────────────────────────── */
+.priceWrap {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
 }
 
 .smallInput {
-  width: 130px;
+  width: 110px;
   padding: 10px 14px;
   border: 1.5px solid var(--gray-200);
   border-radius: 12px;
@@ -5315,8 +7080,20 @@ export default function CatalogPage() {
   font-size: 14px;
   background: #fff;
   outline: none;
+  transition: border-color var(--transition);
 }
 
+.smallInput:focus {
+  border-color: var(--cherry);
+  box-shadow: 0 0 0 3px rgba(139, 26, 46, 0.08);
+}
+
+.priceDash {
+  color: var(--gray-400);
+  font-weight: 600;
+}
+
+/* ── Загрузка / пусто ───────────────────── */
 .loadingWrap {
   display: flex;
   justify-content: center;
@@ -5348,7 +7125,7 @@ export default function CatalogPage() {
   font-size: 48px;
 }
 
-/* Список */
+/* ── Список товаров ─────────────────────── */
 .list {
   display: flex;
   flex-direction: column;
@@ -5446,7 +7223,17 @@ export default function CatalogPage() {
   color: var(--gray-400);
 }
 
+/* ── Адаптив ────────────────────────────── */
 @media (max-width: 900px) {
+  .filterRow {
+    gap: 10px;
+  }
+
+  .dropdown {
+    min-width: 150px;
+    flex: 1;
+  }
+
   .row {
     grid-template-columns: 120px 1fr;
     grid-template-rows: auto auto;
@@ -5466,6 +7253,23 @@ export default function CatalogPage() {
 }
 
 @media (max-width: 560px) {
+  .filterRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dropdown {
+    min-width: 100%;
+  }
+
+  .priceWrap {
+    justify-content: space-between;
+  }
+
+  .smallInput {
+    flex: 1;
+  }
+
   .row {
     grid-template-columns: 1fr;
   }
@@ -5483,8 +7287,7 @@ export default function CatalogPage() {
 </file>
 
 <file path="frontend/src/pages/Delivery/DeliveryPage.jsx">
-import React, { useEffect, useMemo, useState } from 'react';
-import { YMaps, Map, Placemark, ZoomControl } from '@pbe/react-yandex-maps';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
@@ -5492,41 +7295,142 @@ import { ordersAPI } from '../../api';
 import styles from './DeliveryPage.module.css';
 
 const API_KEY = process.env.REACT_APP_YANDEX_MAPS_KEY;
-
-// Ростовская область: bbox = "lon1,lat1~lon2,lat2"
 const ROSTOV_BBOX = '37.0,45.7~44.2,51.5';
-const START_CENTER = [47.2357, 39.7015]; // Ростов-на-Дону
+const START_CENTER = [47.2357, 39.7015];
+
+function loadYandexMapsScript() {
+  return new Promise((resolve, reject) => {
+    if (window.ymaps && window.ymaps.Map) {
+      resolve(window.ymaps);
+      return;
+    }
+    const existing = document.querySelector('script[src*="api-maps.yandex.ru"]');
+    if (existing) {
+      const check = setInterval(() => {
+        if (window.ymaps && window.ymaps.Map) {
+          clearInterval(check);
+          resolve(window.ymaps);
+        }
+      }, 100);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = `https://api-maps.yandex.ru/2.1/?apikey=${API_KEY}&lang=ru_RU`;
+    script.async = true;
+    script.onload = () => {
+      if (window.ymaps) {
+        window.ymaps.ready(() => resolve(window.ymaps));
+      } else {
+        reject(new Error('ymaps не загрузился'));
+      }
+    };
+    script.onerror = () => reject(new Error('Ошибка загрузки Яндекс Карт'));
+    document.head.appendChild(script);
+  });
+}
 
 export default function DeliveryPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { items, totalPrice, clearCart } = useCart();
   const navigate = useNavigate();
 
-  const [coords, setCoords] = useState([
-    user?.last_lat || START_CENTER[0],
-    user?.last_lng || START_CENTER[1],
-  ]);
-  const [address, setAddress] = useState(user?.last_address || '');
-  const [query, setQuery] = useState(user?.last_address || '');
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const placemarkRef = useRef(null);
+
+  const [coords, setCoords] = useState(START_CENTER);
+  const [address, setAddress] = useState('');
+  const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSuggest, setLoadingSuggest] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(null);
   const [error, setError] = useState('');
+  const [mapReady, setMapReady] = useState(false);
 
-  const mapState = useMemo(
-    () => ({
-      center: coords,
-      zoom: 11,
-      controls: ['zoomControl'],
-    }),
-    [coords]
-  );
-
-  // Поиск по адресу в Ростовской области
+  // При монтировании: загружаем свежий профиль и подтягиваем последний адрес
   useEffect(() => {
-    if (!API_KEY) return;
-    if (!query || query.trim().length < 3) {
+    let mounted = true;
+
+    const init = async () => {
+      try {
+        const freshUser = await refreshUser();
+        if (!mounted || !freshUser) return;
+
+        if (freshUser.lastAddress) {
+          setAddress(freshUser.lastAddress);
+          setQuery(freshUser.lastAddress);
+        }
+        if (freshUser.lastLat && freshUser.lastLng) {
+          setCoords([freshUser.lastLat, freshUser.lastLng]);
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки профиля:', err);
+      }
+    };
+
+    init();
+
+    return () => {
+      mounted = false;
+    };
+  }, [refreshUser]);
+
+  // Карта
+  useEffect(() => {
+    let destroyed = false;
+
+    loadYandexMapsScript()
+      .then((ymaps) => {
+        if (destroyed || !mapRef.current) return;
+
+        const map = new ymaps.Map(mapRef.current, {
+          center: coords,
+          zoom: 13,
+          controls: ['zoomControl'],
+        });
+
+        map.options.set('suppressMapOpenBlock', true);
+        map.options.set('yandexMapDisablePoiInteractivity', true);
+
+        const placemark = new ymaps.Placemark(coords);
+        map.geoObjects.add(placemark);
+
+        map.events.add('click', (e) => {
+          const nextCoords = e.get('coords');
+          setCoords(nextCoords);
+          placemark.geometry.setCoordinates(nextCoords);
+          reverseGeocode(nextCoords);
+        });
+
+        mapInstance.current = map;
+        placemarkRef.current = placemark;
+        setMapReady(true);
+      })
+      .catch((err) => {
+        console.error('Ошибка карт:', err);
+        setError('Не удалось загрузить карту. Проверьте API-ключ.');
+      });
+
+    return () => {
+      destroyed = true;
+      if (mapInstance.current) {
+        mapInstance.current.destroy();
+        mapInstance.current = null;
+      }
+    };
+  }, []);
+
+  // Синхронизация координат с картой
+  useEffect(() => {
+    if (mapInstance.current && placemarkRef.current) {
+      mapInstance.current.setCenter(coords, 13);
+      placemarkRef.current.geometry.setCoordinates(coords);
+    }
+  }, [coords]);
+
+  // Подсказки адресов
+  useEffect(() => {
+    if (!API_KEY || !query || query.trim().length < 3) {
       setSuggestions([]);
       return;
     }
@@ -5534,7 +7438,6 @@ export default function DeliveryPage() {
     const timer = setTimeout(async () => {
       try {
         setLoadingSuggest(true);
-
         const url =
           `https://geocode-maps.yandex.ru/1.x/` +
           `?apikey=${API_KEY}` +
@@ -5547,14 +7450,11 @@ export default function DeliveryPage() {
 
         const res = await fetch(url);
         const data = await res.json();
-
-        const members =
-          data?.response?.GeoObjectCollection?.featureMember || [];
+        const members = data?.response?.GeoObjectCollection?.featureMember || [];
 
         const parsed = members.map((item) => {
           const obj = item.GeoObject;
           const [lng, lat] = obj.Point.pos.split(' ').map(Number);
-
           return {
             address: obj.metaDataProperty.GeocoderMetaData.text,
             coords: [lat, lng],
@@ -5574,7 +7474,6 @@ export default function DeliveryPage() {
 
   const reverseGeocode = async ([lat, lng]) => {
     if (!API_KEY) return;
-
     try {
       const url =
         `https://geocode-maps.yandex.ru/1.x/` +
@@ -5588,9 +7487,7 @@ export default function DeliveryPage() {
 
       const res = await fetch(url);
       const data = await res.json();
-
-      const obj =
-        data?.response?.GeoObjectCollection?.featureMember?.[0]?.GeoObject;
+      const obj = data?.response?.GeoObjectCollection?.featureMember?.[0]?.GeoObject;
 
       if (obj) {
         const text = obj.metaDataProperty.GeocoderMetaData.text;
@@ -5611,12 +7508,6 @@ export default function DeliveryPage() {
     setQuery(item.address);
     setCoords(item.coords);
     setSuggestions([]);
-  };
-
-  const handleMapClick = (e) => {
-    const nextCoords = e.get('coords');
-    setCoords(nextCoords);
-    reverseGeocode(nextCoords);
   };
 
   const handleSubmit = async (e) => {
@@ -5650,56 +7541,16 @@ export default function DeliveryPage() {
         deliveryLng: coords[1],
       });
 
-      setSuccess(data);
       clearCart();
+      navigate('/tracking', {
+        state: { order: data.order, deliveryMinutes: data.deliveryMinutes },
+      });
     } catch (err) {
       setError(err.response?.data?.error || 'Ошибка оформления заказа');
     } finally {
       setLoading(false);
     }
   };
-
-  if (success) {
-    return (
-      <div className={styles.successScreen}>
-        <div className={styles.successCard}>
-          <div className={styles.successIcon}>🍒</div>
-          <h2 className={styles.successTitle}>Заказ оформлен!</h2>
-          <p className={styles.successSub}>
-            Ваш заказ #{success.order.id.slice(-6).toUpperCase()} принят
-          </p>
-
-          <div className={styles.deliveryTimer}>
-            <span className={styles.timerIcon}>⏱️</span>
-            <div>
-              <p className={styles.timerLabel}>Ожидаемое время доставки</p>
-              <p className={styles.timerValue}>{success.deliveryMinutes} минут</p>
-            </div>
-          </div>
-
-          <div className={styles.orderInfo}>
-            <div className={styles.orderInfoRow}>
-              <span>Адрес</span>
-              <span>{success.order.deliveryAddress}</span>
-            </div>
-            <div className={styles.orderInfoRow}>
-              <span>Сумма</span>
-              <span>{success.order.total_price?.toLocaleString?.('ru-RU') || success.order.totalPrice?.toLocaleString?.('ru-RU')} ₽</span>
-            </div>
-          </div>
-
-          <div className={styles.successActions}>
-            <button className="btn btn-cherry" onClick={() => navigate('/profile')}>
-              Мои заказы
-            </button>
-            <button className="btn btn-outline" onClick={() => navigate('/catalog')}>
-              Продолжить покупки
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className={styles.page}>
@@ -5746,23 +7597,21 @@ export default function DeliveryPage() {
             </div>
 
             <div className={styles.mapWrap}>
-              <YMaps query={{ apikey: API_KEY, lang: 'ru_RU' }}>
-                <Map
-                  state={mapState}
-                  width="100%"
-                  height="500px"
-                  onClick={handleMapClick}
-                  options={{
-                    suppressMapOpenBlock: true,
-                    yandexMapDisablePoiInteractivity: true,
-                  }}
-                >
-                  <ZoomControl options={{ float: 'right' }} />
-
-                  {/* Стандартная красная метка, без вишни */}
-                  <Placemark geometry={coords} />
-                </Map>
-              </YMaps>
+              {!mapReady && (
+                <div className={styles.mapLoading}>
+                  <div className={styles.spinner} />
+                  <p>Загружаем карту…</p>
+                </div>
+              )}
+              <div
+                ref={mapRef}
+                style={{
+                  width: '100%',
+                  height: '500px',
+                  borderRadius: '16px',
+                  display: mapReady ? 'block' : 'none',
+                }}
+              />
             </div>
 
             <p className={styles.mapHint}>
@@ -5772,17 +7621,6 @@ export default function DeliveryPage() {
 
           <form className={styles.form} onSubmit={handleSubmit}>
             <h2 className={styles.formTitle}>Детали доставки</h2>
-
-            <div className={styles.coordsRow}>
-              <div className={styles.field}>
-                <label className={styles.label}>Широта</label>
-                <input className={styles.input} value={coords[0].toFixed(5)} readOnly />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Долгота</label>
-                <input className={styles.input} value={coords[1].toFixed(5)} readOnly />
-              </div>
-            </div>
 
             <div className={styles.orderSummary}>
               <h3 className={styles.summaryHead}>Ваш заказ</h3>
@@ -5834,6 +7672,12 @@ export default function DeliveryPage() {
   overflow: hidden;
   border: 2px solid var(--cherry-border);
   box-shadow: var(--shadow-md);
+}
+
+/* Фикс leaflet контейнера */
+.mapWrap .leaflet-container {
+  border-radius: var(--radius-lg);
+  font-family: var(--font-main);
 }
 
 .mapHint {
@@ -5975,12 +7819,16 @@ export default function DeliveryPage() {
   color: var(--gray-800);
   font-size: 14px;
   transition: background var(--transition);
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
 }
 
 .suggestionItem:hover {
   background: var(--cherry-pale);
 }
 
+/* Success */
 .successScreen {
   min-height: calc(100vh - 72px);
   display: flex;
@@ -6079,62 +7927,89 @@ export default function DeliveryPage() {
     position: static;
   }
 }
+
+.mapLoading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 500px;
+  gap: 12px;
+  color: var(--gray-600);
+  font-size: 14px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 4px solid var(--cherry-border);
+  border-top-color: var(--cherry);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 </file>
 
 <file path="frontend/src/pages/Home/HomePage.jsx">
 import React, { useState } from 'react';
 import Hero from '../../components/Hero/Hero';
 import ProductSlider from '../../components/Slider/ProductSlider';
+import ProductDetailsModal from '../../components/ProductDetailsModal/ProductDetailsModal';
 import AdModal from '../../components/AdModal/AdModal';
-import { useCart } from '../../context/CartContext';
 import styles from './HomePage.module.css';
 
 export default function HomePage() {
-  const { items } = useCart();
-  const [adCategory, setAdCategory] = useState(null);
+  const [adModalProductId, setAdModalProductId] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
-  // Слушаем изменения корзины для показа рекламного попапа
-  const lastItem = items[items.length - 1];
-  const currentCategory = lastItem?.category;
-
-  const handleAdClose = () => setAdCategory(null);
+  const handleAddToCart = (product) => {
+    setAdModalProductId(product.id);
+  };
 
   return (
     <div className={styles.page}>
-      {/* Hero блок */}
       <Hero />
 
-      {/* Витрина */}
       <section className={`section ${styles.showcase}`}>
         <div className="container">
           <ProductSlider
-            title="🔥 Популярные десерты"
+            title="Популярные десерты"
             subtitle="Самое любимое у наших покупателей"
             params={{ is_popular: true, category: 'desserts', limit: 8 }}
+            onAddToCart={handleAddToCart}
           />
 
           <ProductSlider
-            title="✨ Новинки недели"
+            title="Новинки недели"
             subtitle="Только что появились в нашем ассортименте"
             params={{ is_new: true, limit: 8 }}
+            onAddToCart={handleAddToCart}
           />
 
           <ProductSlider
-            title="⭐ Товар дня"
+            title="Товар дня"
             subtitle="Специальное предложение — только сегодня"
             params={{ is_day_item: true, limit: 6 }}
             featured={true}
+            onAddToCart={handleAddToCart}
           />
         </div>
       </section>
 
-      {/* Рекламный попап при добавлении в корзину */}
-      {currentCategory && adCategory !== null && (
-        <AdModal
-          triggerCategory={adCategory}
-          onClose={handleAdClose}
-        />
-      )}
+      <ProductDetailsModal
+        product={selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+        onAddToCart={handleAddToCart}
+      />
+
+      <AdModal
+        triggerProductId={adModalProductId}
+        onClose={() => setAdModalProductId(null)}
+        onOpenProductDetails={setSelectedProduct}
+      />
     </div>
   );
 }
@@ -6152,37 +8027,78 @@ export default function HomePage() {
 
 <file path="frontend/src/pages/Profile/ProfilePage.jsx">
 import React, { useState, useEffect } from 'react';
-import { userAPI, ordersAPI } from '../../api';
+import { userAPI, ordersAPI, reviewsAPI, deliveryReviewsAPI } from '../../api';
+import ReviewModal from '../../components/ReviewModal/ReviewModal';
 import styles from './ProfilePage.module.css';
+import { useNavigate } from 'react-router-dom';
 
 export default function ProfilePage() {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [orders, setOrders]   = useState([]);
   const [frequent, setFrequent] = useState([]);
+  const [myReviews, setMyReviews] = useState([]);
+  const [myDeliveryReviews, setMyDeliveryReviews] = useState([]);
   const [tab, setTab]         = useState('orders');
   const [email, setEmail]     = useState('');
   const [password, setPassword] = useState('');
   const [saveMsg, setSaveMsg] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  const [reviewModal, setReviewModal] = useState(null);
+  const [deliveryReviewModal, setDeliveryReviewModal] = useState(null);
+  const [deliveryRating, setDeliveryRating] = useState(5);
+  const [deliveryComment, setDeliveryComment] = useState('');
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
+  const [deliveryError, setDeliveryError] = useState('');
 
   useEffect(() => {
     const loadData = async () => {
+      setLoading(true);
+      setLoadError('');
+      
       try {
-        const [{ data: prof }, { data: ord }, { data: freq }] = await Promise.all([
-          userAPI.getProfile(),
-          ordersAPI.getAll(),
-          userAPI.getFrequent(),
-        ]);
-        setProfile(prof);
-        setOrders(ord.orders || []);
-        setFrequent(freq.frequent_products || []);
-        setEmail(prof.email);
-      } catch {
-        // обработка ошибок
-      } finally {
+        const profRes = await userAPI.getProfile();
+        setProfile(profRes.data);
+        setEmail(profRes.data.email);
+      } catch (err) {
+        console.error('Ошибка загрузки профиля:', err);
+        setLoadError('Не удалось загрузить профиль');
         setLoading(false);
+        return;
       }
+
+      const results = await Promise.allSettled([
+        ordersAPI.getAll(),
+        userAPI.getFrequent(),
+        reviewsAPI.getMy(),
+        deliveryReviewsAPI.getMy().catch(() => ({ data: { reviews: [] } }))
+      ]);
+
+      const [ordersRes, frequentRes, reviewsRes, deliveryRes] = results;
+
+      if (ordersRes.status === 'fulfilled') {
+        setOrders(ordersRes.value.data?.orders || []);
+      } else {
+        console.error('Ошибка заказов:', ordersRes.reason);
+      }
+
+      if (frequentRes.status === 'fulfilled') {
+        setFrequent(frequentRes.value.data?.frequent_products || []);
+      }
+
+      if (reviewsRes.status === 'fulfilled') {
+        setMyReviews(reviewsRes.value.data?.reviews || []);
+      }
+
+      if (deliveryRes.status === 'fulfilled') {
+        setMyDeliveryReviews(deliveryRes.value.data?.reviews || []);
+      }
+
+      setLoading(false);
     };
+
     loadData();
   }, []);
 
@@ -6194,7 +8110,7 @@ export default function ProfilePage() {
       if (password) payload.password = password;
 
       await userAPI.updateProfile(payload);
-      setSaveMsg('Профиль обновлён ✓');
+      setSaveMsg('Профиль обновлен');
       setPassword('');
       setTimeout(() => setSaveMsg(''), 3000);
     } catch (err) {
@@ -6202,10 +8118,83 @@ export default function ProfilePage() {
     }
   };
 
+  const hasReview = (orderId, productId) =>
+    myReviews.some((r) => r.orderId === orderId && r.productId === productId);
+
+  const hasDeliveryReview = (orderId) =>
+    myDeliveryReviews.some((r) => r.orderId === orderId);
+
+  const handleReviewSuccess = async () => {
+    try {
+      const { data } = await reviewsAPI.getMy();
+      setMyReviews(data.reviews || []);
+    } catch (err) {
+      console.error('Ошибка обновления отзывов:', err);
+    }
+  };
+
+  const handleDeliveryReviewSuccess = async () => {
+    try {
+      const { data } = await deliveryReviewsAPI.getMy();
+      setMyDeliveryReviews(data.reviews || []);
+    } catch (err) {
+      console.error('Ошибка обновления отзывов на доставку:', err);
+    }
+  };
+
+  const handleDeliveryReviewSubmit = async (e) => {
+    e.preventDefault();
+    if (!deliveryReviewModal) return;
+    setDeliveryError('');
+    setDeliveryLoading(true);
+    try {
+      await deliveryReviewsAPI.create({
+        orderId: deliveryReviewModal.id,
+        rating: deliveryRating,
+        comment: deliveryComment,
+      });
+      await handleDeliveryReviewSuccess();
+      setDeliveryReviewModal(null);
+      setDeliveryRating(5);
+      setDeliveryComment('');
+    } catch (err) {
+      setDeliveryError(err.response?.data?.error || 'Ошибка отправки отзыва');
+    } finally {
+      setDeliveryLoading(false);
+    }
+  };
+
   if (loading) {
     return (
-      <div className={styles.loadingWrap}>
-        <div className={styles.spinner} />
+      <div className={styles.page}>
+        <div className="container">
+          <div className={styles.loadingWrap}>
+            <div className={styles.spinner} />
+            <p>Загружаем данные...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className={styles.page}>
+        <div className="container">
+          <div className={styles.emptyTab} style={{ color: '#dc2626', padding: 40 }}>
+            {loadError}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className={styles.page}>
+        <div className="container">
+          <div className={styles.emptyTab}>Не удалось загрузить профиль</div>
+        </div>
       </div>
     );
   }
@@ -6221,7 +8210,7 @@ export default function ProfilePage() {
           <div>
             <h1 className={styles.profileName}>{profile?.email}</h1>
             <p className={styles.profileRole}>
-              {profile?.role === 'admin' ? '👑 Администратор' : '🛒 Покупатель'}
+              {profile?.role === 'ADMIN' ? 'Администратор' : 'Покупатель'}
             </p>
           </div>
         </div>
@@ -6229,9 +8218,10 @@ export default function ProfilePage() {
         {/* Вкладки */}
         <div className={styles.tabs}>
           {[
-            { key: 'orders',   label: '📦 История заказов' },
-            { key: 'frequent', label: '⭐ Часто покупаю' },
-            { key: 'settings', label: '⚙️ Настройки' },
+            { key: 'orders',   label: 'История заказов' },
+            { key: 'frequent', label: 'Часто покупаю' },
+            { key: 'reviews',  label: 'Мои отзывы' },
+            { key: 'settings', label: 'Настройки' },
           ].map((t) => (
             <button
               key={t.key}
@@ -6249,46 +8239,116 @@ export default function ProfilePage() {
             {orders.length === 0 ? (
               <p className={styles.emptyTab}>Заказов пока нет</p>
             ) : (
-              orders.map((order) => (
-                <div key={order.id} className={styles.orderCard}>
-                  <div className={styles.orderHeader}>
-                    <div>
-                      <p className={styles.orderId}>
-                        Заказ #{order.id.slice(-6).toUpperCase()}
-                      </p>
-                      <p className={styles.orderDate}>
-                        {new Date(order.created_at).toLocaleDateString('ru-RU', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </p>
+              orders.map((order) => {
+                const isDone = order.status === 'DONE';
+                const orderHasDeliveryReview = hasDeliveryReview(order.id);
+                
+                return (
+                  <div key={order.id} className={styles.orderCard}>
+                    <div className={styles.orderHeader}>
+                      <div>
+                        <p className={styles.orderId}>
+                          Заказ #{order.id.slice(-6).toUpperCase()}
+                        </p>
+                        <p className={styles.orderDate}>
+                          {order.createdAt
+                            ? new Date(order.createdAt).toLocaleDateString('ru-RU', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : '—'}
+                        </p>
+                      </div>
+                      <div className={styles.orderRight}>
+                        <span className={`${styles.statusBadge} ${styles[order.status?.toLowerCase()]}`}>
+                          {statusLabel(order.status)}
+                        </span>
+                        <p className={styles.orderTotal}>
+                          {(order.totalPrice ?? 0).toLocaleString('ru-RU')} ₽
+                        </p>
+                        {order.status !== 'DONE' && order.status !== 'CANCELLED' && (
+                          <button
+                            className={styles.trackBtn}
+                            onClick={() => navigate('/tracking', {
+                              state: { order, deliveryMinutes: order.deliveryMinutes || 30 }
+                            })}
+                          >
+                            Отследить
+                          </button>
+                        )}
+                        {order.status === 'DONE' && (
+                          <button
+                            className={styles.trackBtn}
+                            onClick={() => navigate('/tracking', {
+                              state: { order, deliveryMinutes: order.deliveryMinutes || 30 }
+                            })}
+                          >
+                            Подробности
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className={styles.orderRight}>
-                      <span className={`${styles.statusBadge} ${styles[order.status]}`}>
-                        {statusLabel(order.status)}
-                      </span>
-                      <p className={styles.orderTotal}>
-                        {order.total_price.toLocaleString('ru-RU')} ₽
-                      </p>
+
+                    {/* СЕКЦИЯ ТОВАРОВ */}
+                    <div className={styles.orderItems}>
+                      <p className={styles.orderItemsTitle}>Товары</p>
+                      {order.items?.map((item, i) => {
+                        const itemHasReview = hasReview(order.id, item.productId);
+                        return (
+                          <div key={i} className={styles.orderItemRow}>
+                            <span className={styles.orderItem}>
+                              {item.name} × {item.quantity}
+                            </span>
+                            {/* Кнопка только для DONE без отзыва */}
+                            {isDone && !itemHasReview && (
+                              <button
+                                className={styles.reviewBtn}
+                                onClick={() => setReviewModal({ product: item, order })}
+                              >
+                                Оставить отзыв
+                              </button>
+                            )}
+                            {/* Статус "Оценено" если отзыв есть (любой статус) */}
+                            {itemHasReview && (
+                              <span className={styles.reviewDone}>Оценено</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* СЕКЦИЯ ДОСТАВКИ */}
+                    <div className={styles.deliverySection}>
+                      <p className={styles.orderItemsTitle}>Доставка</p>
+                      <div className={styles.deliveryRow}>
+                        <span className={styles.deliveryAddress}>
+                          {order.deliveryAddress || '—'}
+                        </span>
+                        {/* Кнопка только для DONE без отзыва */}
+                        {isDone && !orderHasDeliveryReview && (
+                          <button
+                            className={styles.reviewBtn}
+                            onClick={() => setDeliveryReviewModal(order)}
+                          >
+                            Оценить доставку
+                          </button>
+                        )}
+                        {/* Статус если отзыв есть (любой статус) */}
+                        {orderHasDeliveryReview && (
+                          <span className={styles.reviewDone}>Доставка оценена</span>
+                        )}
+                        {/* Для не-DONE без отзыва показываем адрес без кнопки */}
+                        {!isDone && !orderHasDeliveryReview && (
+                          <span className={styles.deliveryPending}>В процессе</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-
-                  <div className={styles.orderItems}>
-                    {order.items.map((item, i) => (
-                      <span key={i} className={styles.orderItem}>
-                        {item.name} × {item.quantity}
-                      </span>
-                    ))}
-                  </div>
-
-                  <p className={styles.orderAddress}>
-                    📍 {order.delivery_address}
-                  </p>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
@@ -6298,7 +8358,7 @@ export default function ProfilePage() {
           <div className={styles.tabContent}>
             {frequent.length === 0 ? (
               <p className={styles.emptyTab}>
-                Купите что-нибудь, чтобы здесь появилась статистика 🛒
+                Купите что-нибудь, чтобы здесь появилась статистика
               </p>
             ) : (
               <div className={styles.frequentGrid}>
@@ -6306,23 +8366,101 @@ export default function ProfilePage() {
                   <div key={i} className={styles.frequentCard}>
                     <div className={styles.frequentRank}>#{i + 1}</div>
                     <img
-                      src={
-                        item.product_details?.image_url ||
-                        `https://picsum.photos/seed/${item.name}/80/80`
-                      }
+                      src={item.imageUrl || `https://picsum.photos/seed/${item.name}/80/80`}
                       alt={item.name}
                       className={styles.frequentImg}
                     />
                     <div className={styles.frequentInfo}>
                       <p className={styles.frequentName}>{item.name}</p>
                       <p className={styles.frequentQty}>
-                        Куплено: <strong>{item.total_qty}</strong> шт.
+                        Куплено: <strong>{item.totalQty ?? item.total_qty ?? 0}</strong> шт.
                       </p>
-                      <p className={styles.frequentPrice}>{item.last_price} ₽</p>
+                      <p className={styles.frequentPrice}>
+                        {(item.price ?? item.last_price ?? 0).toLocaleString('ru-RU')} ₽
+                      </p>
                     </div>
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Мои отзывы */}
+        {tab === 'reviews' && (
+          <div className={styles.tabContent}>
+            {myReviews.length === 0 && myDeliveryReviews.length === 0 ? (
+              <p className={styles.emptyTab}>Вы еще не оставили ни одного отзыва</p>
+            ) : (
+              <>
+                {/* Отзывы на товары */}
+                {myReviews.length > 0 && (
+                  <div className={styles.reviewsSection}>
+                    <h3 className={styles.reviewsSectionTitle}>Отзывы на товары</h3>
+                    <div className={styles.reviewsList}>
+                      {myReviews.map((review) => (
+                        <div key={review.id} className={styles.reviewCard}>
+                          <div className={styles.reviewHeader}>
+                            <img
+                              src={review.product?.imageUrl || `https://picsum.photos/seed/${review.product?.name}/60/60`}
+                              alt={review.product?.name}
+                              className={styles.reviewProductImg}
+                            />
+                            <div className={styles.reviewMeta}>
+                              <p className={styles.reviewProductName}>{review.product?.name}</p>
+                              <div className={styles.reviewStars}>
+                                {Array.from({ length: 5 }).map((_, i) => (
+                                  <span key={i} className={i < review.rating ? styles.starFilled : styles.starEmpty}>★</span>
+                                ))}
+                              </div>
+                              <p className={styles.reviewDate}>
+                                {review.createdAt
+                                  ? new Date(review.createdAt).toLocaleDateString('ru-RU')
+                                  : '—'}
+                              </p>
+                            </div>
+                          </div>
+                          <p className={styles.reviewComment}>{review.comment}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Отзывы на доставку */}
+                {myDeliveryReviews.length > 0 && (
+                  <div className={styles.reviewsSection}>
+                    <h3 className={styles.reviewsSectionTitle}>Отзывы на доставку</h3>
+                    <div className={styles.reviewsList}>
+                      {myDeliveryReviews.map((review) => (
+                        <div key={review.id} className={styles.reviewCard}>
+                          <div className={styles.reviewHeader}>
+                            <div className={styles.reviewMeta}>
+                              <p className={styles.reviewProductName}>
+                                Заказ #{review.order?.id?.slice(-6).toUpperCase() || '—'}
+                              </p>
+                              <div className={styles.reviewStars}>
+                                {Array.from({ length: 5 }).map((_, i) => (
+                                  <span key={i} className={i < review.rating ? styles.starFilled : styles.starEmpty}>★</span>
+                                ))}
+                              </div>
+                              <p className={styles.reviewDate}>
+                                {review.createdAt
+                                  ? new Date(review.createdAt).toLocaleDateString('ru-RU')
+                                  : '—'}
+                              </p>
+                            </div>
+                          </div>
+                          <p className={styles.reviewComment}>{review.comment}</p>
+                          <p className={styles.reviewAddress}>
+                            {review.order?.deliveryAddress || '—'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -6367,17 +8505,64 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Модалка отзыва на товар */}
+      {reviewModal && (
+        <ReviewModal
+          product={reviewModal.product}
+          order={reviewModal.order}
+          onClose={() => setReviewModal(null)}
+          onSuccess={handleReviewSuccess}
+        />
+      )}
+
+      {/* Модалка отзыва на доставку */}
+      {deliveryReviewModal && (
+        <div className={styles.overlay} onClick={() => setDeliveryReviewModal(null)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <button className={styles.closeBtn} onClick={() => setDeliveryReviewModal(null)}>×</button>
+            <h3 className={styles.modalTitle}>Оценить доставку</h3>
+            <p className={styles.modalSub}>Заказ #{deliveryReviewModal.id.slice(-6).toUpperCase()}</p>
+            <form onSubmit={handleDeliveryReviewSubmit}>
+              <div className={styles.stars}>
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`${styles.star} ${s <= deliveryRating ? styles.starActive : ''}`}
+                    onClick={() => setDeliveryRating(s)}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+              <textarea
+                className={styles.textarea}
+                placeholder="Расскажите о доставке..."
+                value={deliveryComment}
+                onChange={(e) => setDeliveryComment(e.target.value)}
+                rows={4}
+                required
+              />
+              {deliveryError && <p className={styles.error}>{deliveryError}</p>}
+              <button type="submit" className="btn btn-cherry" disabled={deliveryLoading}>
+                {deliveryLoading ? 'Отправляем...' : 'Отправить отзыв'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function statusLabel(status) {
   const labels = {
-    pending:    'Ожидает',
-    processing: 'Обработка',
-    delivering: 'Доставляется',
-    done:       'Выполнен',
-    cancelled:  'Отменён',
+    PENDING:    'Ожидает',
+    PROCESSING: 'Обработка',
+    DELIVERING: 'Доставляется',
+    DONE:       'Выполнен',
+    CANCELLED:  'Отменен',
   };
   return labels[status] || status;
 }
@@ -6553,17 +8738,53 @@ function statusLabel(status) {
 
 .orderItems {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 0;
   margin-bottom: 10px;
 }
 
+/* Отзывы в заказе */
+.orderItemRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.orderItemRow:last-child {
+  border-bottom: none;
+}
+
 .orderItem {
-  padding: 4px 12px;
-  background: var(--gray-100);
-  border-radius: 20px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--gray-700);
+}
+
+.reviewBtn {
+  padding: 6px 14px;
+  background: var(--cherry-pale);
+  color: var(--cherry);
+  border: 1px solid var(--cherry-border);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.reviewBtn:hover {
+  background: var(--cherry);
+  color: #fff;
+}
+
+.reviewDone {
+  font-size: 12px;
+  color: #16A34A;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .orderAddress {
@@ -6640,6 +8861,81 @@ function statusLabel(status) {
   color: var(--cherry);
 }
 
+/* Мои отзывы */
+.reviewsList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reviewCard {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  transition: all var(--transition);
+}
+
+.reviewCard:hover {
+  border-color: var(--cherry-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.reviewHeader {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.reviewProductImg {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.reviewMeta {
+  flex: 1;
+}
+
+.reviewProductName {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin-bottom: 4px;
+}
+
+.reviewStars {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.starFilled {
+  color: #F59E0B;
+  font-size: 16px;
+}
+
+.starEmpty {
+  color: var(--gray-200);
+  font-size: 16px;
+}
+
+.reviewDate {
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.reviewComment {
+  font-size: 14px;
+  color: var(--gray-700);
+  line-height: 1.6;
+  padding-top: 10px;
+  border-top: 1px solid var(--gray-100);
+}
+
 /* Настройки */
 .settingsForm {
   max-width: 480px;
@@ -6700,6 +8996,700 @@ function statusLabel(status) {
   background: #FEF2F2;
   color: #991B1B;
   border: 1px solid #FECACA;
+}
+
+.trackBtn {
+  margin-top: 8px;
+  padding: 8px 16px;
+  background: var(--cherry);
+  color: #fff;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  border: none;
+}
+
+.trackBtn:hover {
+  background: var(--cherry-dark);
+  transform: translateY(-1px);
+}
+
+.orderItemsTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gray-600);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  margin-bottom: 8px;
+}
+
+.deliverySection {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--gray-100);
+}
+
+.deliveryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.deliveryAddress {
+  font-size: 14px;
+  color: var(--gray-700);
+  flex: 1;
+}
+
+/* Модалка отзыва на доставку */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(3px);
+  animation: fadeOverlay 0.2s ease;
+}
+
+@keyframes fadeOverlay {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal {
+  position: relative;
+  width: min(480px, 100%);
+  background: #fff;
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.2);
+  animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.9) translateY(20px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.closeBtn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--gray-700);
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+  border: none;
+}
+
+.closeBtn:hover {
+  background: var(--cherry);
+  color: #fff;
+}
+
+.modalTitle {
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: var(--gray-900);
+  margin-bottom: 4px;
+}
+
+.modalSub {
+  font-size: 14px;
+  color: var(--gray-600);
+  margin-bottom: 20px;
+}
+
+.stars {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.star {
+  font-size: 36px;
+  color: var(--gray-200);
+  background: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1;
+  border: none;
+}
+
+.star:hover {
+  transform: scale(1.15);
+}
+
+.starActive {
+  color: #F59E0B;
+}
+
+.textarea {
+  width: 100%;
+  padding: 14px;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 14px;
+  font-family: var(--font-main);
+  font-size: 15px;
+  resize: vertical;
+  min-height: 100px;
+  outline: none;
+  transition: all var(--transition);
+  margin-bottom: 16px;
+}
+
+.textarea:focus {
+  border-color: var(--cherry);
+  box-shadow: 0 0 0 3px rgba(139, 26, 46, 0.08);
+}
+
+.deliveryPending {
+  font-size: 12px;
+  color: var(--gray-500);
+  font-weight: 500;
+}
+
+.reviewsSection {
+  margin-bottom: 32px;
+}
+
+.reviewsSectionTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--gray-900);
+  margin-bottom: 16px;
+}
+
+.reviewAddress {
+  font-size: 13px;
+  color: var(--gray-500);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--gray-100);
+}
+</file>
+
+<file path="frontend/src/pages/Tracking/OrderTrackingPage.jsx">
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ordersAPI, deliveryReviewsAPI } from '../../api';
+import styles from './OrderTrackingPage.module.css';
+
+const PREPARE_SECONDS = 5 * 60;
+
+export default function OrderTrackingPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const state = location.state || {};
+
+  const [order, setOrder] = useState(state.order || null);
+  const [deliveryMinutes, setDeliveryMinutes] = useState(state.deliveryMinutes || 0);
+  const [loading, setLoading] = useState(!state.order);
+  const [phase, setPhase] = useState('preparing');
+  const [timeLeft, setTimeLeft] = useState(PREPARE_SECONDS);
+  const [showReview, setShowReview] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+  const [reviewSent, setReviewSent] = useState(false);
+  const [hasDeliveryReview, setHasDeliveryReview] = useState(false);
+
+  // Загрузка заказа, если пришли без state (F5 / прямой заход)
+  useEffect(() => {
+    if (state.order) return;
+
+    const load = async () => {
+      try {
+        const { data } = await ordersAPI.getAll();
+        const orders = data.orders || [];
+        const lastOrder = orders[0];
+        if (lastOrder) {
+          setOrder(lastOrder);
+          setDeliveryMinutes(lastOrder.deliveryMinutes || 30);
+        } else {
+          navigate('/profile');
+        }
+      } catch {
+        navigate('/profile');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, [state.order, navigate]);
+
+  // Проверяем, есть ли уже отзыв на доставку для текущего заказа
+  useEffect(() => {
+    if (!order) return;
+    const check = async () => {
+      try {
+        const { data } = await deliveryReviewsAPI.getMy();
+        const exists = data.reviews?.some((r) => r.orderId === order.id);
+        setHasDeliveryReview(exists);
+        if (exists) setShowReview(false);
+      } catch {
+        setHasDeliveryReview(false);
+      }
+    };
+    check();
+  }, [order?.id]);
+
+  // Таймер фаз доставки
+  useEffect(() => {
+    if (!order) return;
+
+    const createdAt = new Date(order.createdAt).getTime();
+    const totalSeconds = deliveryMinutes * 60;
+
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - createdAt) / 1000);
+
+      if (elapsed < PREPARE_SECONDS) {
+        setPhase('preparing');
+        setTimeLeft(PREPARE_SECONDS - elapsed);
+      } else if (elapsed < totalSeconds) {
+        setPhase('delivering');
+        setTimeLeft(totalSeconds - elapsed);
+      } else {
+        setPhase('done');
+        setTimeLeft(0);
+        if (!hasDeliveryReview) setShowReview(true);
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [order, deliveryMinutes, hasDeliveryReview]);
+
+  const formatTime = (s) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  const handleReviewSubmit = async (e) => {
+    e.preventDefault();
+    if (!order) return;
+    try {
+      await deliveryReviewsAPI.create({
+        orderId: order.id,
+        rating,
+        comment,
+      });
+      setReviewSent(true);
+      setHasDeliveryReview(true);
+      setTimeout(() => setShowReview(false), 2000);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Ошибка отправки отзыва');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.loadingWrap}>
+          <div className={styles.spinner} />
+          <p>Загружаем заказ…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!order) return null;
+
+  const progressPercent =
+    phase === 'preparing'
+      ? ((PREPARE_SECONDS - timeLeft) / PREPARE_SECONDS) * 100
+      : phase === 'delivering'
+      ? ((deliveryMinutes * 60 - timeLeft) / (deliveryMinutes * 60)) * 100
+      : 100;
+
+  return (
+    <div className={styles.page}>
+      <div className="container">
+        <div className={styles.card}>
+          <span className={styles.orderNum}>
+            Заказ #{order.id.slice(-6).toUpperCase()}
+          </span>
+
+          <div className={styles.statusBlock}>
+            {phase === 'preparing' && (
+              <>
+                <div className={styles.pulseWrap}>
+                  <div className={styles.pulse} />
+                  <span className={styles.bagIcon}></span>
+                </div>
+                <h2 className={styles.statusTitle}>Собираем ваш заказ</h2>
+                <p className={styles.statusSub}>
+                  Осталось примерно <strong>{formatTime(timeLeft)}</strong>
+                </p>
+              </>
+            )}
+
+            {phase === 'delivering' && (
+              <>
+                <div className={styles.carWrap}></div>
+                <h2 className={styles.statusTitle}>Ваш заказ в пути</h2>
+                <p className={styles.statusSub}>
+                  Приблизительное время: <strong>{formatTime(timeLeft)}</strong>
+                </p>
+              </>
+            )}
+
+            {phase === 'done' && (
+              <>
+                <div className={styles.doneWrap}></div>
+                <h2 className={styles.statusTitle}>Заказ доставлен!</h2>
+                <p className={styles.statusSub}>Приятного аппетита</p>
+              </>
+            )}
+
+            <div className={styles.progressTrack}>
+              <div
+                className={styles.progressFill}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+
+          <div className={styles.details}>
+            <div className={styles.detailRow}>
+              <span>Адрес</span>
+              <span>{order.deliveryAddress || '—'}</span>
+            </div>
+            <div className={styles.detailRow}>
+              <span>Сумма</span>
+              <span>
+                {(order.totalPrice ?? order.total_price ?? 0).toLocaleString('ru-RU')} ₽
+              </span>
+            </div>
+          </div>
+
+          {phase === 'done' && hasDeliveryReview && (
+            <p className={styles.alreadyReviewed}>Вы уже оставили отзыв о доставке</p>
+          )}
+        </div>
+      </div>
+
+      {showReview && !reviewSent && (
+        <div className={styles.overlay} onClick={() => setShowReview(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h3 className={styles.modalTitle}>Как прошла доставка?</h3>
+
+            <div className={styles.stars}>
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className={`${styles.star} ${s <= rating ? styles.starActive : ''}`}
+                  onClick={() => setRating(s)}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              className={styles.textarea}
+              placeholder="Расскажите о курьере, скорости, упаковке..."
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={4}
+              required
+            />
+
+            <button className="btn btn-cherry" onClick={handleReviewSubmit}>
+              Отправить отзыв
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showReview && reviewSent && (
+        <div className={styles.overlay}>
+          <div className={styles.modal}>
+            <div className={styles.doneIcon}></div>
+            <h3 className={styles.modalTitle}>Спасибо за отзыв!</h3>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="frontend/src/pages/Tracking/OrderTrackingPage.module.css">
+.page {
+  padding: 40px 0 80px;
+}
+
+.card {
+  max-width: 560px;
+  margin: 0 auto;
+  background: var(--white);
+  border: 1.5px solid var(--cherry-border);
+  border-radius: var(--radius-xl);
+  padding: 40px;
+  text-align: center;
+  box-shadow: var(--shadow-md);
+}
+
+.orderNum {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cherry);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 24px;
+  padding: 6px 16px;
+  background: var(--cherry-pale);
+  border-radius: 20px;
+}
+
+.statusBlock {
+  margin-bottom: 32px;
+}
+
+/* Сборка — пульс */
+.pulseWrap {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--cherry-pale);
+  animation: pulse-ring 1.5s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+  0%   { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+.bagIcon {
+  position: relative;
+  font-size: 36px;
+  z-index: 1;
+}
+
+/* Доставка */
+.carWrap {
+  font-size: 56px;
+  margin-bottom: 16px;
+  animation: car-bounce 1s ease infinite alternate;
+}
+
+@keyframes car-bounce {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-6px); }
+}
+
+/* Готово */
+.doneWrap {
+  font-size: 64px;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 4px 12px rgba(139, 26, 46, 0.25));
+}
+
+.statusTitle {
+  font-family: var(--font-display);
+  font-size: 26px;
+  color: var(--gray-900);
+  margin-bottom: 8px;
+}
+
+.statusSub {
+  font-size: 15px;
+  color: var(--gray-600);
+}
+
+.statusSub strong {
+  color: var(--cherry);
+  font-weight: 700;
+}
+
+/* Прогресс */
+.progressTrack {
+  width: 100%;
+  height: 8px;
+  background: var(--gray-200);
+  border-radius: 4px;
+  margin-top: 24px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--cherry);
+  border-radius: 4px;
+  transition: width 1s linear;
+}
+
+/* Детали */
+.details {
+  padding-top: 24px;
+  border-top: 1px solid var(--gray-100);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detailRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: var(--gray-700);
+}
+
+.detailRow span:last-child {
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+/* Модалка отзыва */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(3px);
+  animation: fadeOverlay 0.2s ease;
+}
+
+@keyframes fadeOverlay {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal {
+  width: min(440px, 100%);
+  background: #fff;
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.9) translateY(20px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modalTitle {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--gray-900);
+  margin-bottom: 20px;
+}
+
+.stars {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.star {
+  font-size: 36px;
+  color: var(--gray-200);
+  background: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.star:hover {
+  transform: scale(1.15);
+}
+
+.starActive {
+  color: #F59E0B;
+}
+
+.textarea {
+  width: 100%;
+  padding: 14px;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 14px;
+  font-family: var(--font-main);
+  font-size: 15px;
+  resize: vertical;
+  min-height: 100px;
+  outline: none;
+  margin-bottom: 16px;
+}
+
+.textarea:focus {
+  border-color: var(--cherry);
+  box-shadow: 0 0 0 3px rgba(139, 26, 46, 0.08);
+}
+
+.doneIcon {
+  font-size: 56px;
+  margin-bottom: 12px;
+}
+
+.loadingWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
+  color: var(--gray-600);
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 4px solid var(--cherry-border);
+  border-top-color: var(--cherry);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.alreadyReviewed {
+  margin-top: 16px;
+  padding: 12px;
+  background: #f0fdf4;
+  color: #166534;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
 }
 </file>
 

@@ -58,7 +58,6 @@ export default function AdModal({ triggerProductId, onClose, onOpenProductDetail
       >
         <div className={styles.header}>
           <div className={styles.headerLeft}>
-            <span className={styles.icon}>🎁</span>
             <div>
               <p className={styles.eyebrow}>Специально для вас</p>
               <h3 className={styles.title}>{modal.title}</h3>

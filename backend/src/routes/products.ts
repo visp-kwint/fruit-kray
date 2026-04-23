@@ -10,8 +10,9 @@ const FiltersSchema = z.object({
   search: z.string().optional(),
   minPrice: z.coerce.number().nonnegative().optional(),
   maxPrice: z.coerce.number().nonnegative().optional(),
+  sort: z.enum(['popular', 'new', 'cheap', 'expensive', 'default']).optional().default('default'),
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().min(1).max(200).default(20),  // ← max: 200
+  limit: z.coerce.number().int().min(1).max(200).default(20),
 });
 
 router.get('/', async (req: Request, res: Response) => {
@@ -21,7 +22,7 @@ router.get('/', async (req: Request, res: Response) => {
     return;
   }
 
-  const { categorySlug, search, minPrice, maxPrice, page, limit } = parsed.data;
+  const { categorySlug, search, minPrice, maxPrice, sort, page, limit } = parsed.data;
 
   const where: Prisma.ProductWhereInput = {
     ...(categorySlug && {
@@ -42,6 +43,23 @@ router.get('/', async (req: Request, res: Response) => {
     }),
   };
 
+  let orderBy: Prisma.ProductOrderByWithRelationInput | Prisma.ProductOrderByWithRelationInput[] = { createdAt: 'desc' };
+
+  switch (sort) {
+    case 'popular':
+      orderBy = [{ isPopular: 'desc' }, { createdAt: 'desc' }];
+      break;
+    case 'new':
+      orderBy = [{ isNew: 'desc' }, { createdAt: 'desc' }];
+      break;
+    case 'cheap':
+      orderBy = { price: 'asc' };
+      break;
+    case 'expensive':
+      orderBy = { price: 'desc' };
+      break;
+  }
+
   const skip = (page - 1) * limit;
 
   const [products, total] = await Promise.all([
@@ -50,7 +68,7 @@ router.get('/', async (req: Request, res: Response) => {
       include: { category: true },
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy,
     }),
     prisma.product.count({ where }),
   ]);
@@ -58,24 +76,21 @@ router.get('/', async (req: Request, res: Response) => {
   res.json({ products, total, page, limit });
 });
 
-router.get('/admodal/by-category', async (req: Request, res: Response) => {
-  const categoryId = req.query.categoryId as string | undefined;
-  const categorySlug = req.query.categorySlug as string | undefined;
+router.get('/admodal/by-product', async (req: Request, res: Response) => {
+  const productId = req.query.productId as string | undefined;
 
-  if (!categoryId && !categorySlug) {
-    res.status(400).json({ error: 'Укажите categoryId или categorySlug' });
+  if (!productId) {
+    res.status(400).json({ error: 'Укажите productId' });
     return;
   }
 
   const modal = await prisma.adModal.findFirst({
     where: {
       isActive: true,
-      ...(categoryId
-        ? { triggerCategoryId: categoryId }
-        : { triggerCategory: { slug: categorySlug! } }),
+      triggerProductId: productId,
     },
     include: {
-      triggerCategory: true,
+      triggerProduct: true,
       product: {
         include: { category: true },
       },

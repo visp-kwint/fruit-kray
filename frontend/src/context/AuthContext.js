@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { authAPI } from '../api';
+import { authAPI, userAPI } from '../api';
 
 const AuthContext = createContext(null);
 
@@ -35,10 +35,21 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const { data } = await userAPI.getProfile();
+      localStorage.setItem('user', JSON.stringify(data));
+      setUser(data);
+      return data;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const isAdmin = ['ADMIN', 'MODERATOR'].includes(user?.role);
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isAdmin }}>
+    <AuthContext.Provider value={{ user, login, register, logout, refreshUser, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );

@@ -20,7 +20,6 @@ const CreateOrderSchema = z.object({
   deliveryLng:     z.number().default(0),
 });
 
-// ── POST /api/orders ───────────────────────────────────────────────
 router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   const parsed = CreateOrderSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -31,8 +30,23 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   const { items, deliveryAddress, deliveryLat, deliveryLng } = parsed.data;
   const userId = req.user!.userId;
 
+  // ── Проверяем, что все товары из корзины ещё существуют в БД ──
+  const productIds = items.map((i) => i.productId);
+  const existingProducts = await prisma.product.findMany({
+    where: { id: { in: productIds } },
+    select: { id: true },
+  });
+  const existingIds = new Set(existingProducts.map((p) => p.id));
+  const missing = productIds.find((id) => !existingIds.has(id));
+  if (missing) {
+    res.status(400).json({
+      error: 'Один из товаров в корзине больше не существует. Обновите корзину.',
+    });
+    return;
+  }
+
   const totalPrice      = items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const deliveryMinutes = Math.floor(Math.random() * 56) + 5;
+  const deliveryMinutes = Math.floor(Math.random() * 51) + 10; // ← 10–60 мин
 
   const order = await prisma.$transaction(async (tx) => {
     const newOrder = await tx.order.create({
@@ -71,7 +85,6 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   });
 });
 
-// ── GET /api/orders ────────────────────────────────────────────────
 router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
   const orders = await prisma.order.findMany({
     where:   { userId: req.user!.userId },
@@ -82,7 +95,6 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
   res.json({ orders });
 });
 
-// ── GET /api/orders/frequent ───────────────────────────────────────
 router.get('/frequent', requireAuth, async (req: AuthRequest, res: Response) => {
   const userId = req.user!.userId;
 

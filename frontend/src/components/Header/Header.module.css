@@ -5,7 +5,7 @@
   right: 0;
   z-index: 1000;
   height: 72px;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid transparent;
   transition: all 0.22s ease;
@@ -28,11 +28,14 @@
   align-items: center;
   gap: 10px;
   text-decoration: none;
+  flex-shrink: 0;
 }
 
 .logoIcon {
-  font-size: 28px;
-  filter: drop-shadow(0 2px 4px rgba(139, 26, 46, 0.3));
+  color: var(--cherry);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .logoText {
@@ -43,6 +46,25 @@
   letter-spacing: -0.5px;
 }
 
+/* Бургер — скрыт на десктопе */
+.burger {
+  display: none;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--gray-700);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+}
+
+.burger:hover {
+  background: var(--cherry-pale);
+  color: var(--cherry);
+}
+
+/* Навигация десктоп */
 .nav {
   display: flex;
   align-items: center;
@@ -51,6 +73,9 @@
 
 .navLink {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 14px;
   font-size: 15px;
   font-weight: 500;
@@ -80,33 +105,27 @@
   border-radius: 1px;
 }
 
-.cartBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  background: var(--cherry);
-  color: white;
-  font-size: 11px;
-  font-weight: 700;
-  border-radius: 50%;
-  margin-left: 6px;
-  animation: badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes badge-pop {
-  from { transform: scale(0); }
-  to   { transform: scale(1); }
-}
-
 .adminLink {
-  color: var(--cherry) !important;
+  color: var(--cherry);
   background: var(--cherry-pale);
   border: 1px solid var(--cherry-border);
 }
 
+.registerLink {
+  background: var(--cherry);
+  color: white;
+  box-shadow: 0 4px 14px rgba(139, 26, 46, 0.35);
+}
+
+.registerLink:hover {
+  background: var(--cherry-dark);
+  color: white;
+}
+
 .logoutBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 14px;
   font-size: 15px;
   font-weight: 500;
@@ -119,4 +138,80 @@
 .logoutBtn:hover {
   color: var(--cherry);
   background: var(--cherry-pale);
+}
+
+.cartBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--cherry);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 10px;
+  margin-left: 2px;
+  animation: badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes badge-pop {
+  from { transform: scale(0); }
+  to   { transform: scale(1); }
+}
+
+/* ── Мобильная адаптивность ── */
+@media (max-width: 768px) {
+  .burger {
+    display: flex;
+  }
+
+  .nav {
+    position: absolute;
+    top: 72px;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--cherry-border);
+    box-shadow: 0 8px 24px rgba(139, 26, 46, 0.12);
+    padding: 8px 16px 16px;
+    transform: translateY(-10px);
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    transition: all 0.25s ease;
+  }
+
+  .navOpen {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: all;
+    visibility: visible;
+  }
+
+  .navLink,
+  .logoutBtn {
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .navLink.active::after {
+    display: none;
+  }
+
+  .adminLink {
+    margin-top: 4px;
+  }
+
+  .registerLink {
+    margin-top: 4px;
+    justify-content: center;
+  }
 }

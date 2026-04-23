@@ -22,7 +22,7 @@ const ProductSchema = z.object({
 });
 
 const AdModalSchema = z.object({
-  triggerCategoryId: z.string().min(1, 'Категория-триггер обязательна'),
+  triggerProductId: z.string().min(1, 'Товар-триггер обязателен'),
   title: z.string().min(1, 'Заголовок обязателен'),
   description: z.string().default(''),
   productId: z.string().min(1, 'Товар обязателен'),
@@ -100,7 +100,7 @@ router.delete('/products/:id', async (req: AuthRequest, res: Response) => {
 router.get('/admodals', async (_req: AuthRequest, res: Response) => {
   const modals = await prisma.adModal.findMany({
     include: {
-      triggerCategory: true,
+      triggerProduct: true,
       product: {
         include: { category: true },
       },
@@ -118,11 +118,11 @@ router.post('/admodals', async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const category = await prisma.category.findUnique({
-    where: { id: parsed.data.triggerCategoryId },
+  const triggerProduct = await prisma.product.findUnique({
+    where: { id: parsed.data.triggerProductId },
   });
-  if (!category) {
-    res.status(404).json({ error: 'Категория не найдена' });
+  if (!triggerProduct) {
+    res.status(404).json({ error: 'Товар-триггер не найден' });
     return;
   }
 
@@ -130,14 +130,14 @@ router.post('/admodals', async (req: AuthRequest, res: Response) => {
     where: { id: parsed.data.productId },
   });
   if (!product) {
-    res.status(404).json({ error: 'Товар не найден' });
+    res.status(404).json({ error: 'Рекламируемый товар не найден' });
     return;
   }
 
   const modal = await prisma.adModal.create({
     data: parsed.data,
     include: {
-      triggerCategory: true,
+      triggerProduct: true,
       product: { include: { category: true } },
     },
   });
