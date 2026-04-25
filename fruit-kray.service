@@ -1,0 +1,17 @@
+[Unit]
+Description=Frukt Kray Backend API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/fruit-kray/backend
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=8080
+EnvironmentFile=/root/fruit-kray/backend/.env
+
+[Install]
+WantedBy=multi-user.target

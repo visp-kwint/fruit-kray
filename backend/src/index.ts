@@ -25,8 +25,10 @@ app.use(cors);
 app.use(express.json({ limit: '10mb' }));
 app.use(globalLimiter);
 
+// Static files: uploads
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
+// API routes
 app.use('/api/auth',             authRouter);
 app.use('/api/categories',       categoriesRouter);
 app.use('/api/products',         productsRouter);
@@ -38,14 +40,26 @@ app.use('/api/reviews',          reviewsRouter);
 app.use('/api/delivery-reviews', deliveryReviewsRouter);
 app.use('/api/cart',             cartRouter);
 
+// Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'Фрукт Край API' });
 });
 
+// Serve React build in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(process.cwd(), '../frontend/build')));
+  
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(process.cwd(), '../frontend/build', 'index.html'));
+  });
+}
+
+// 404
 app.use((_req, res) => {
   res.status(404).json({ error: 'Маршрут не найден' });
 });
 
+// Error handler
 app.use(
   (
     err: Error,
@@ -64,9 +78,9 @@ async function start() {
     console.log('Prisma подключена к БД');
     console.log('DATABASE_URL =', process.env.DATABASE_URL);
 
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`\nФрукт Край API запущен`);
-      console.log(`http://localhost:${PORT}\n`);
+      console.log(`   http://0.0.0.0:${PORT}\n`);
     });
   } catch (err) {
     console.error('Ошибка запуска:', err);
