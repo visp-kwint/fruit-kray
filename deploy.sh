@@ -1,14 +1,17 @@
 #!/bin/bash
 set -e
 
-PROJECT_DIR="/fruit-kray"
-echo "🚀 Деплой Фрукт Край на fruitedge.ru..."
+# Определяем директорию, где лежит этот скрипт
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-cd "$PROJECT_DIR"
+echo "🚀 Деплой Фрукт Край на fruitedge.ru..."
+echo "📁 Рабочая директория: $SCRIPT_DIR"
+
+cd "$SCRIPT_DIR"
 git pull origin main
 
 # Backend
-cd "$PROJECT_DIR/backend"
+cd "$SCRIPT_DIR/backend"
 npm ci
 npx prisma generate
 npx prisma db push --accept-data-loss
@@ -17,7 +20,7 @@ mkdir -p uploads
 chmod 755 uploads
 
 # Frontend
-cd "$PROJECT_DIR/frontend"
+cd "$SCRIPT_DIR/frontend"
 npm ci
 npm run build
 
