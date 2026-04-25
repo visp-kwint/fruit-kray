@@ -68,6 +68,7 @@ backend/src/types/index.ts
 backend/tsconfig.json
 backend/uploads/1776774144153-698745.jpg
 backend/uploads/1776888494086-594252.jpg
+deploy.sh
 frontend/.env
 frontend/package.json
 frontend/public/assets/hero-frukt-kray.png
@@ -109,6 +110,9 @@ frontend/src/pages/Profile/ProfilePage.module.css
 frontend/src/pages/Tracking/OrderTrackingPage.jsx
 frontend/src/pages/Tracking/OrderTrackingPage.module.css
 frontend/src/styles/global.css
+fruit-kray.service
+nginx-fruit-kray.conf
+package.json
 </directory_structure>
 
 <files>
@@ -120,16 +124,11 @@ repomix-output.xml
 </file>
 
 <file path="backend/.env">
-# SQLite (локально, без установки — просто файл)
 DATABASE_URL="file:./prisma/dev.db"
-
-# Или PostgreSQL (раскомментировать):
-# DATABASE_URL="postgresql://user:password@localhost:5432/frukt_kray"
-
-JWT_SECRET="frukt-kray-super-secret-min-32-chars-change-in-prod"
+JWT_SECRET="frukt-kray-prod-secret-32-chars-min-change-me-now"
 PORT=8080
-CLIENT_URL="http://localhost:3000"
-NODE_ENV="development"
+CLIENT_URL="https://fruitedge.ru"
+NODE_ENV="production"
 </file>
 
 <file path="backend/package.json">
@@ -199,6 +198,7 @@ model Category {
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
+  name         String   @default("") @map("name")
   passwordHash String   @map("password_hash")
   role         String   @default("USER")
   lastAddress  String   @default("") @map("last_address")
@@ -386,6 +386,7 @@ async function main() {
   const admin = await prisma.user.create({
     data: {
       email: 'admin@frukt-kray.ru',
+      name: 'Администратор',
       passwordHash: adminHash,
       role: 'ADMIN',
     },
@@ -394,25 +395,18 @@ async function main() {
   const user = await prisma.user.create({
     data: {
       email: 'user@frukt-kray.ru',
+      name: 'Иван Петров',
       passwordHash: userHash,
       role: 'USER',
     },
   });
 
-  const categoriesData = [
-    'Фрукты',
-    'Овощи',
-    'Десерты',
-    'Ягоды',
-  ];
+  const categoriesData = ['Фрукты', 'Овощи', 'Десерты', 'Ягоды'];
 
   const categories: Record<string, any> = {};
   for (const name of categoriesData) {
     const cat = await prisma.category.create({
-      data: {
-        name,
-        slug: slugify(name),
-      },
+      data: { name, slug: slugify(name) },
     });
     categories[name] = cat;
   }
@@ -422,6 +416,7 @@ async function main() {
   const desserts = categories['Десерты'];
   const berries = categories['Ягоды'];
 
+  // ── ТОВАРЫ ───────────────────────────────────────────────────────
   const strawberry = await prisma.product.create({
     data: {
       name: 'Клубника садовая',
@@ -593,6 +588,7 @@ async function main() {
     },
   });
 
+  // ── РЕКЛАМНЫЕ ПОПАПЫ ────────────────────────────────────────────
   await prisma.adModal.createMany({
     data: [
       {
@@ -619,7 +615,11 @@ async function main() {
     ],
   });
 
-  // === ЗАКАЗ 1: Выполнен, можно оставить отзыв на товары и доставку ===
+  // ═══════════════════════════════════════════════════════════════
+  // ЗАКАЗЫ для тестирования отзывов (все DONE, кроме одного PENDING)
+  // ═══════════════════════════════════════════════════════════════
+
+  // Заказ 1: DONE — ягоды + десерт
   const order1 = await prisma.order.create({
     data: {
       userId: user.id,
@@ -631,24 +631,14 @@ async function main() {
       deliveryMinutes: 27,
       items: {
         create: [
-          {
-            productId: cherry.id,
-            name: cherry.name,
-            price: cherry.price,
-            quantity: 2,
-          },
-          {
-            productId: cherryCake.id,
-            name: cherryCake.name,
-            price: cherryCake.price,
-            quantity: 1,
-          },
+          { productId: cherry.id, name: cherry.name, price: cherry.price, quantity: 2 },
+          { productId: cherryCake.id, name: cherryCake.name, price: cherryCake.price, quantity: 1 },
         ],
       },
     },
   });
 
-  // === ЗАКАЗ 2: Выполнен, для тестирования отзывов ===
+  // Заказ 2: DONE — фрукты + десерт
   const order2 = await prisma.order.create({
     data: {
       userId: user.id,
@@ -660,24 +650,14 @@ async function main() {
       deliveryMinutes: 45,
       items: {
         create: [
-          {
-            productId: apples.id,
-            name: apples.name,
-            price: apples.price,
-            quantity: 3,
-          },
-          {
-            productId: strawberryTart.id,
-            name: strawberryTart.name,
-            price: strawberryTart.price,
-            quantity: 1,
-          },
+          { productId: apples.id, name: apples.name, price: apples.price, quantity: 3 },
+          { productId: strawberryTart.id, name: strawberryTart.name, price: strawberryTart.price, quantity: 1 },
         ],
       },
     },
   });
 
-  // === ЗАКАЗ 3: Выполнен, для тестирования ===
+  // Заказ 3: DONE — только десерт
   const order3 = await prisma.order.create({
     data: {
       userId: user.id,
@@ -689,19 +669,73 @@ async function main() {
       deliveryMinutes: 15,
       items: {
         create: [
-          {
-            productId: strudel.id,
-            name: strudel.name,
-            price: strudel.price,
-            quantity: 1,
-          },
+          { productId: strudel.id, name: strudel.name, price: strudel.price, quantity: 1 },
         ],
       },
     },
   });
 
-  // === ЗАКАЗ 4: В процессе (нельзя оставить отзыв) ===
+  // Заказ 4: DONE — овощи (можно оставить отзыв на томаты, огурцы, баклажаны, кабачок)
   const order4 = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalPrice: 490,
+      status: 'DONE',
+      deliveryAddress: 'г. Ростов-на-Дону, ул. Пушкинская, 15',
+      deliveryLat: 47.2225,
+      deliveryLng: 39.7187,
+      deliveryMinutes: 35,
+      items: {
+        create: [
+          { productId: tomatoes.id, name: tomatoes.name, price: tomatoes.price, quantity: 1 },
+          { productId: cucumbers.id, name: cucumbers.name, price: cucumbers.price, quantity: 1 },
+          { productId: eggplants.id, name: eggplants.name, price: eggplants.price, quantity: 1 },
+          { productId: zucchini.id, name: zucchini.name, price: zucchini.price, quantity: 1 },
+        ],
+      },
+    },
+  });
+
+  // Заказ 5: DONE — фрукты + ягоды (персики + клубника)
+  const order5 = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalPrice: 770,
+      status: 'DONE',
+      deliveryAddress: 'г. Ростов-на-Дону, пр. Ворошиловский, 62',
+      deliveryLat: 47.2362,
+      deliveryLng: 39.7120,
+      deliveryMinutes: 22,
+      items: {
+        create: [
+          { productId: peaches.id, name: peaches.name, price: peaches.price, quantity: 1 },
+          { productId: strawberry.id, name: strawberry.name, price: strawberry.price, quantity: 1 },
+        ],
+      },
+    },
+  });
+
+  // Заказ 6: DONE — десерты (панна-котта + штрудель)
+  const order6 = await prisma.order.create({
+    data: {
+      userId: user.id,
+      totalPrice: 580,
+      status: 'DONE',
+      deliveryAddress: 'г. Таганрог, ул. Чехова, 22',
+      deliveryLat: 47.2105,
+      deliveryLng: 38.9178,
+      deliveryMinutes: 50,
+      items: {
+        create: [
+          { productId: pannaCotta.id, name: pannaCotta.name, price: pannaCotta.price, quantity: 1 },
+          { productId: strudel.id, name: strudel.name, price: strudel.price, quantity: 1 },
+        ],
+      },
+    },
+  });
+
+  // Заказ 7: PENDING — в процессе (отзыв оставить нельзя)
+  const order7 = await prisma.order.create({
     data: {
       userId: user.id,
       totalPrice: 3360,
@@ -712,58 +746,28 @@ async function main() {
       deliveryMinutes: 30,
       items: {
         create: [
-          {
-            productId: cherry.id,
-            name: cherry.name,
-            price: cherry.price,
-            quantity: 1,
-          },
-          {
-            productId: apples.id,
-            name: apples.name,
-            price: apples.price,
-            quantity: 2,
-          },
-          {
-            productId: cherryCake.id,
-            name: cherryCake.name,
-            price: cherryCake.price,
-            quantity: 2,
-          },
-          {
-            productId: strawberryTart.id,
-            name: strawberryTart.name,
-            price: strawberryTart.price,
-            quantity: 1,
-          },
-          {
-            productId: pannaCotta.id,
-            name: pannaCotta.name,
-            price: pannaCotta.price,
-            quantity: 1,
-          },
-          {
-            productId: strudel.id,
-            name: strudel.name,
-            price: strudel.price,
-            quantity: 1,
-          },
+          { productId: cherry.id, name: cherry.name, price: cherry.price, quantity: 1 },
+          { productId: apples.id, name: apples.name, price: apples.price, quantity: 2 },
+          { productId: cherryCake.id, name: cherryCake.name, price: cherryCake.price, quantity: 2 },
+          { productId: strawberryTart.id, name: strawberryTart.name, price: strawberryTart.price, quantity: 1 },
+          { productId: pannaCotta.id, name: pannaCotta.name, price: pannaCotta.price, quantity: 1 },
+          { productId: strudel.id, name: strudel.name, price: strudel.price, quantity: 1 },
         ],
       },
     },
   });
 
-  console.log('✅ Админ:', admin.email);
-  console.log('✅ Пользователь:', user.email);
-  console.log('✅ Категорий:', 4);
-  console.log('✅ Товаров:', 12);
-  console.log('✅ Попапов:', 3);
-  console.log('✅ Заказов:', 4, '(3 выполнено, 1 в обработке)');
+  console.log('Админ:', admin.email);
+  console.log('Пользователь:', user.email);
+  console.log('Категорий:', 4);
+  console.log('Товаров:', 12);
+  console.log('Попапов:', 3);
+  console.log('Заказов:', 7, '(6 выполнено — можно оставить отзывы, 1 в обработке)');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seed error:', e);
+    console.error('Seed error:', e);
     process.exit(1);
   })
   .finally(async () => {
@@ -893,7 +897,7 @@ import deliveryReviewsRouter from './routes/deliveryReviews';
 import cartRouter            from './routes/cart';
 
 const app  = express();
-const PORT = process.env.PORT ?? 8080;
+const PORT = Number(process.env.PORT ?? 8080);
 
 app.use(cors);
 app.use(express.json({ limit: '10mb' }));
@@ -913,8 +917,17 @@ app.use('/api/delivery-reviews', deliveryReviewsRouter);
 app.use('/api/cart',             cartRouter);
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: '🍒 Фрукт Край API' });
+  res.json({ status: 'ok', service: 'Фрукт Край API' });
 });
+
+// Serve React build in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(process.cwd(), '../frontend/build')));
+  
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(process.cwd(), '../frontend/build', 'index.html'));
+  });
+}
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Маршрут не найден' });
@@ -927,7 +940,7 @@ app.use(
     res: express.Response,
     _next: express.NextFunction
   ) => {
-    console.error('❌ Unhandled error:', err.message);
+    console.error('Unhandled error:', err.message);
     res.status(500).json({ error: err.message || 'Внутренняя ошибка сервера' });
   }
 );
@@ -935,15 +948,15 @@ app.use(
 async function start() {
   try {
     await prisma.$connect();
-    console.log('✅ Prisma подключена к БД');
-    console.log('📁 DATABASE_URL =', process.env.DATABASE_URL);
+    console.log('Prisma подключена к БД');
+    console.log('DATABASE_URL =', process.env.DATABASE_URL);
 
-    app.listen(PORT, () => {
-      console.log(`\n🍒 Фрукт Край API запущен`);
-      console.log(`   http://localhost:${PORT}\n`);
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`\nФрукт Край API запущен`);
+      console.log(`   http://0.0.0.0:${PORT}\n`);
     });
   } catch (err) {
-    console.error('❌ Ошибка запуска:', err);
+    console.error('Ошибка запуска:', err);
     process.exit(1);
   }
 }
@@ -983,7 +996,8 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
 }
 
 export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
-  if (![Role.ADMIN, Role.MODERATOR].includes((req.user?.role ?? '') as Role)) {
+  const role = req.user?.role;
+  if (role !== Role.ADMIN && role !== Role.MODERATOR) {
     res.status(403).json({ error: 'Доступ запрещён' });
     return;
   }
@@ -995,12 +1009,22 @@ export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction
 <file path="backend/src/middleware/cors.ts">
 import corsLib from 'cors';
 
-const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:3000';
+const allowedOrigins = [
+  'https://fruitedge.ru',
+  'http://fruitedge.ru',
+  'http://localhost:3000',
+];
 
 export const cors = corsLib({
-  origin:      CLIENT_URL,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
-  methods:     ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 });
 </file>
@@ -1516,13 +1540,20 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const review = await prisma.deliveryReview.create({
-    data: { orderId, userId, rating, comment },
-    include: {
-      user:  { select: { email: true } },
-      order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true } },
-    },
-  });
+  // Создаём отзыв и меняем статус заказа на DONE
+  const [review] = await prisma.$transaction([
+    prisma.deliveryReview.create({
+      data: { orderId, userId, rating, comment },
+      include: {
+        user:  { select: { name: true, email: true } },
+        order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true } },
+      },
+    }),
+    prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'DONE' },
+    }),
+  ]);
 
   res.status(201).json(review);
 });
@@ -1532,7 +1563,7 @@ router.get('/my', requireAuth, async (req: AuthRequest, res: Response) => {
   const reviews = await prisma.deliveryReview.findMany({
     where: { userId: req.user!.userId },
     include: {
-      order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true } },
+      order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true, status: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -1543,7 +1574,7 @@ router.get('/my', requireAuth, async (req: AuthRequest, res: Response) => {
 router.get('/', requireAuth, requireAdmin, async (_req: AuthRequest, res: Response) => {
   const reviews = await prisma.deliveryReview.findMany({
     include: {
-      user:  { select: { email: true } },
+      user:  { select: { name: true, email: true } },
       order: { select: { id: true, deliveryAddress: true, deliveryMinutes: true } },
     },
     orderBy: { createdAt: 'desc' },
@@ -1586,6 +1617,23 @@ const CreateOrderSchema = z.object({
   deliveryLng:     z.number().default(0),
 });
 
+// ── Границы Ростовской области (приблизительные) ─────────────────
+const ROSTOV_BOUNDS = {
+  minLat: 45.85,
+  maxLat: 50.35,
+  minLng: 38.05,
+  maxLng: 43.35,
+};
+
+function isInRostovOblast(lat: number, lng: number): boolean {
+  return (
+    lat >= ROSTOV_BOUNDS.minLat &&
+    lat <= ROSTOV_BOUNDS.maxLat &&
+    lng >= ROSTOV_BOUNDS.minLng &&
+    lng <= ROSTOV_BOUNDS.maxLng
+  );
+}
+
 router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   const parsed = CreateOrderSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -1595,6 +1643,14 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
 
   const { items, deliveryAddress, deliveryLat, deliveryLng } = parsed.data;
   const userId = req.user!.userId;
+
+  // ── Проверка: только Ростовская область ─────────────────────────
+  if (!isInRostovOblast(deliveryLat, deliveryLng)) {
+    res.status(400).json({
+      error: 'Доставка возможна только в пределах Ростовской области',
+    });
+    return;
+  }
 
   // ── Проверяем, что все товары из корзины ещё существуют в БД ──
   const productIds = items.map((i) => i.productId);
@@ -1884,7 +1940,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   const review = await prisma.review.create({
     data: { userId, productId, orderId, rating, comment },
     include: {
-      user:    { select: { email: true } },
+      user:    { select: { name: true, email: true } },
       product: { select: { name: true, imageUrl: true } },
       order:   { select: { id: true } },
     },
@@ -1911,7 +1967,7 @@ router.get('/product/:productId', async (req, res) => {
   const reviews = await prisma.review.findMany({
     where: { productId: req.params.productId },
     include: {
-      user: { select: { email: true } },
+      user: { select: { name: true, email: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -1998,6 +2054,7 @@ router.get('/profile', requireAuth, async (req: AuthRequest, res: Response) => {
     select: {
       id:          true,
       email:       true,
+      name:        true,
       role:        true,
       lastAddress: true,
       lastLat:     true,
@@ -2007,7 +2064,7 @@ router.get('/profile', requireAuth, async (req: AuthRequest, res: Response) => {
   });
 
   if (!user) {
-    res.status(404).json({ error: 'Пользователь не найден' });
+    res.status(401).json({ error: 'Пользователь не найден' });
     return;
   }
 
@@ -2017,9 +2074,10 @@ router.get('/profile', requireAuth, async (req: AuthRequest, res: Response) => {
 // ── PUT /api/users/profile ─────────────────────────────────────────
 const UpdateSchema = z.object({
   email:    z.string().email('Неверный email').optional(),
+  name:     z.string().min(1, 'Имя не может быть пустым').max(100, 'Максимум 100 символов').optional(),
   password: z.string().min(6, 'Пароль минимум 6 символов').optional(),
 }).refine(
-  (data) => data.email || data.password,
+  (data) => data.email !== undefined || data.name !== undefined || data.password !== undefined,
   { message: 'Укажите хотя бы одно поле для изменения' },
 );
 
@@ -2030,17 +2088,20 @@ router.put('/profile', requireAuth, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const { email, password } = parsed.data;
+  const { email, name, password } = parsed.data;
   const updateData: Record<string, string> = {};
 
   if (email) {
-    // Проверяем, не занят ли новый email
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing && existing.id !== req.user!.userId) {
       res.status(409).json({ error: 'Email уже используется' });
       return;
     }
     updateData.email = email;
+  }
+
+  if (name !== undefined) {
+    updateData.name = name;
   }
 
   if (password) {
@@ -2102,8 +2163,42 @@ export interface AuthRequest extends Request {
 }
 </file>
 
+<file path="deploy.sh">
+#!/bin/bash
+set -e
+
+# Определяем директорию, где лежит этот скрипт
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+echo "🚀 Деплой Фрукт Край на fruitedge.ru..."
+echo "📁 Рабочая директория: $SCRIPT_DIR"
+
+cd "$SCRIPT_DIR"
+git pull origin main
+
+# Backend
+cd "$SCRIPT_DIR/backend"
+npm ci
+npx prisma generate
+npx prisma db push --accept-data-loss
+npm run build
+mkdir -p uploads
+chmod 755 uploads
+
+# Frontend
+cd "$SCRIPT_DIR/frontend"
+npm ci
+npm run build
+
+# Restart
+systemctl restart fruit-kray
+systemctl restart nginx
+
+echo "✅ Деплой завершён! https://fruitedge.ru"
+</file>
+
 <file path="frontend/.env">
-REACT_APP_API_URL=http://localhost:8080/api
+REACT_APP_API_URL=/api
 REACT_APP_YANDEX_MAPS_KEY=d6e6c560-f89d-4f14-9671-d32735b600c2
 </file>
 
@@ -2112,6 +2207,7 @@ REACT_APP_YANDEX_MAPS_KEY=d6e6c560-f89d-4f14-9671-d32735b600c2
   "name": "frukt-kray",
   "version": "1.0.0",
   "private": true,
+  "homepage": ".",
   "dependencies": {
     "@pbe/react-yandex-maps": "^1.2.5",
     "axios": "^1.6.5",
@@ -2128,6 +2224,7 @@ REACT_APP_YANDEX_MAPS_KEY=d6e6c560-f89d-4f14-9671-d32735b600c2
     "start": "react-scripts start",
     "build": "react-scripts build"
   },
+  "proxy": "http://localhost:8080",
   "browserslist": {
     "production": [
       ">0.2%",
@@ -3257,6 +3354,7 @@ export default function ProductCard({ product, featured = false, onAddToCart }) 
   height: 200px;
   overflow: hidden;
   background: var(--gray-100);
+  flex-shrink: 0;
 }
 
 .image {
@@ -3276,12 +3374,15 @@ export default function ProductCard({ product, featured = false, onAddToCart }) 
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* Предотвращаем растягивание карточки контентом */
+  min-height: 0;
 }
 
 .category {
   font-size: 12px;
   color: var(--gray-600);
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .name {
@@ -3289,7 +3390,12 @@ export default function ProductCard({ product, featured = false, onAddToCart }) 
   font-weight: 700;
   color: var(--gray-900);
   line-height: 1.3;
-  flex: 1;
+  /* Фиксированная высота для названия — 2 строки */
+  min-height: calc(16px * 1.3 * 2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .desc {
@@ -3300,6 +3406,9 @@ export default function ProductCard({ product, featured = false, onAddToCart }) 
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  /* Фиксированная высота описания — 2 строки */
+  min-height: calc(13px * 1.5 * 2);
+  max-height: calc(13px * 1.5 * 2);
 }
 
 .footer {
@@ -3309,6 +3418,7 @@ export default function ProductCard({ product, featured = false, onAddToCart }) 
   margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--gray-100);
+  flex-shrink: 0;
 }
 
 .price {
@@ -3392,6 +3502,16 @@ export default function ProductDetailsModal({ product, onClose, onAddToCart }) {
     ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
     : null;
 
+  // Функция для отображения имени пользователя
+  const getUserDisplayName = (review) => {
+    if (review.user?.name && review.user.name.trim()) {
+      return review.user.name;
+    }
+    // Если имя не задано, показываем часть email до @
+    const email = review.user?.email || 'Пользователь';
+    return email.split('@')[0];
+  };
+
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -3456,7 +3576,9 @@ export default function ProductDetailsModal({ product, onClose, onAddToCart }) {
                 {reviews.map((r) => (
                   <div key={r.id} className={styles.reviewItem}>
                     <div className={styles.reviewTop}>
-                      <span className={styles.reviewAuthor}>{r.user?.email?.split('@')[0] || 'Пользователь'}</span>
+                      <span className={styles.reviewAuthor}>
+                        {getUserDisplayName(r)}
+                      </span>
                       <span className={styles.reviewItemStars}>
                         {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
                       </span>
@@ -3711,6 +3833,274 @@ export default function ProductDetailsModal({ product, onClose, onAddToCart }) {
   .body {
     padding: 20px;
     max-height: none;
+  }
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(3px);
+  animation: fadeOverlay 0.2s ease;
+}
+
+@keyframes fadeOverlay {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal {
+  position: relative;
+  width: min(880px, 100%);
+  background: #fff;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.2);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Ограничиваем максимальную высоту модалки */
+  max-height: 85vh;
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.9) translateY(20px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.closeBtn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--gray-700);
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all var(--transition);
+}
+
+.closeBtn:hover {
+  background: var(--cherry);
+  color: #fff;
+}
+
+.image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  min-height: 320px;
+  display: block;
+}
+
+.body {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* Включаем прокрутку только для правой колонки с контентом */
+  overflow-y: auto;
+  max-height: 85vh;
+}
+
+.category {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cherry);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.2;
+  color: var(--gray-900);
+}
+
+.short {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--gray-600);
+  line-height: 1.5;
+}
+
+.details {
+  font-size: 14px;
+  color: var(--gray-700);
+  line-height: 1.7;
+  padding-top: 8px;
+  border-top: 1px solid var(--gray-100);
+}
+
+.badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ratingRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.ratingStars {
+  color: #F59E0B;
+  font-size: 18px;
+  letter-spacing: 1px;
+}
+
+.ratingValue {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--gray-900);
+}
+
+.ratingCount {
+  font-size: 14px;
+  color: var(--gray-500);
+}
+
+.footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--gray-100);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.price {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--cherry);
+}
+
+.reviewsSection {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--gray-100);
+  max-height: 240px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.reviewsTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.reviewsLoading,
+.reviewsEmpty {
+  font-size: 14px;
+  color: var(--gray-500);
+  padding: 8px 0;
+}
+
+.reviewsList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cherry-border) transparent;
+}
+
+.reviewsList::-webkit-scrollbar {
+  width: 4px;
+}
+
+.reviewsList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.reviewsList::-webkit-scrollbar-thumb {
+  background: var(--cherry-border);
+  border-radius: 2px;
+}
+
+.reviewsList::-webkit-scrollbar-thumb:hover {
+  background: var(--cherry);
+}
+
+.reviewItem {
+  padding: 12px;
+  background: var(--gray-50);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.reviewTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.reviewAuthor {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gray-800);
+}
+
+.reviewItemStars {
+  color: #F59E0B;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.reviewItemComment {
+  font-size: 14px;
+  color: var(--gray-700);
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+.reviewItemDate {
+  font-size: 12px;
+  color: var(--gray-400);
+}
+
+@media (max-width: 680px) {
+  .modal {
+    grid-template-columns: 1fr;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .image {
+    min-height: 220px;
+    max-height: 260px;
+  }
+
+  .body {
+    padding: 20px;
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .reviewsSection {
+    max-height: 200px;
   }
 }
 </file>
@@ -6199,7 +6589,7 @@ export default function CartPage() {
   if (items.length === 0) {
     return (
       <div className={styles.empty}>
-        <span className={styles.emptyIcon}>🛒</span>
+        {/* <span className={styles.emptyIcon}>🛒</span> */}
         <h2>Корзина пуста</h2>
         <p>Добавьте товары из каталога, чтобы оформить заказ</p>
         <Link to="/catalog" className="btn btn-cherry" style={{ marginTop: 24 }}>
@@ -7296,6 +7686,24 @@ import styles from './DeliveryPage.module.css';
 
 const API_KEY = process.env.REACT_APP_YANDEX_MAPS_KEY;
 const ROSTOV_BBOX = '37.0,45.7~44.2,51.5';
+
+// ── Границы Ростовской области ───────────────────────────────────
+const ROSTOV_BOUNDS = {
+  minLat: 45.85,
+  maxLat: 50.35,
+  minLng: 38.05,
+  maxLng: 43.35,
+};
+
+function isInRostovOblast(lat, lng) {
+  return (
+    lat >= ROSTOV_BOUNDS.minLat &&
+    lat <= ROSTOV_BOUNDS.maxLat &&
+    lng >= ROSTOV_BOUNDS.minLng &&
+    lng <= ROSTOV_BOUNDS.maxLng
+  );
+}
+
 const START_CENTER = [47.2357, 39.7015];
 
 function loadYandexMapsScript() {
@@ -7347,7 +7755,6 @@ export default function DeliveryPage() {
   const [error, setError] = useState('');
   const [mapReady, setMapReady] = useState(false);
 
-  // При монтировании: загружаем свежий профиль и подтягиваем последний адрес
   useEffect(() => {
     let mounted = true;
 
@@ -7375,7 +7782,6 @@ export default function DeliveryPage() {
     };
   }, [refreshUser]);
 
-  // Карта
   useEffect(() => {
     let destroyed = false;
 
@@ -7388,6 +7794,12 @@ export default function DeliveryPage() {
           zoom: 13,
           controls: ['zoomControl'],
         });
+
+        // Ограничиваем область просмотра Ростовской областью
+        map.options.set('restrictMapArea', [
+          [ROSTOV_BOUNDS.minLat, ROSTOV_BOUNDS.minLng],
+          [ROSTOV_BOUNDS.maxLat, ROSTOV_BOUNDS.maxLng],
+        ]);
 
         map.options.set('suppressMapOpenBlock', true);
         map.options.set('yandexMapDisablePoiInteractivity', true);
@@ -7420,7 +7832,6 @@ export default function DeliveryPage() {
     };
   }, []);
 
-  // Синхронизация координат с картой
   useEffect(() => {
     if (mapInstance.current && placemarkRef.current) {
       mapInstance.current.setCenter(coords, 13);
@@ -7428,7 +7839,6 @@ export default function DeliveryPage() {
     }
   }, [coords]);
 
-  // Подсказки адресов
   useEffect(() => {
     if (!API_KEY || !query || query.trim().length < 3) {
       setSuggestions([]);
@@ -7523,6 +7933,12 @@ export default function DeliveryPage() {
       return;
     }
 
+    // ── Проверка: только Ростовская область ───────────────────────
+    if (!isInRostovOblast(coords[0], coords[1])) {
+      setError('Доставка возможна только в пределах Ростовской области. Выберите адрес на карте внутри региона.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -7559,7 +7975,7 @@ export default function DeliveryPage() {
           Оформление заказа
         </h1>
         <p className="section-subtitle">
-          Выберите точку доставки на карте или введите адрес вручную
+          Выберите точку доставки на карте или введите адрес вручную (только Ростовская область)
         </p>
 
         <div className={styles.layout}>
@@ -7615,7 +8031,7 @@ export default function DeliveryPage() {
             </div>
 
             <p className={styles.mapHint}>
-              Нажмите на карту, чтобы выбрать точку доставки
+              Нажмите на карту, чтобы выбрать точку доставки (только Ростовская область)
             </p>
           </div>
 
@@ -8041,6 +8457,7 @@ export default function ProfilePage() {
   const [myDeliveryReviews, setMyDeliveryReviews] = useState([]);
   const [tab, setTab]         = useState('orders');
   const [email, setEmail]     = useState('');
+  const [name, setName]       = useState('');
   const [password, setPassword] = useState('');
   const [saveMsg, setSaveMsg] = useState('');
   const [loading, setLoading] = useState(true);
@@ -8062,6 +8479,7 @@ export default function ProfilePage() {
         const profRes = await userAPI.getProfile();
         setProfile(profRes.data);
         setEmail(profRes.data.email);
+        setName(profRes.data.name || '');
       } catch (err) {
         console.error('Ошибка загрузки профиля:', err);
         setLoadError('Не удалось загрузить профиль');
@@ -8107,10 +8525,24 @@ export default function ProfilePage() {
     try {
       const payload = {};
       if (email !== profile.email) payload.email = email;
+      if (name !== (profile.name || '')) payload.name = name;
       if (password) payload.password = password;
 
+      if (Object.keys(payload).length === 0) {
+        setSaveMsg('Нет изменений для сохранения');
+        setTimeout(() => setSaveMsg(''), 3000);
+        return;
+      }
+
       await userAPI.updateProfile(payload);
-      setSaveMsg('Профиль обновлен');
+      
+      // Обновляем профиль в стейте и localStorage
+      const updatedProfile = { ...profile, ...payload };
+      delete updatedProfile.password;
+      setProfile(updatedProfile);
+      localStorage.setItem('user', JSON.stringify(updatedProfile));
+      
+      setSaveMsg('Профиль обновлён');
       setPassword('');
       setTimeout(() => setSaveMsg(''), 3000);
     } catch (err) {
@@ -8137,10 +8569,14 @@ export default function ProfilePage() {
     try {
       const { data } = await deliveryReviewsAPI.getMy();
       setMyDeliveryReviews(data.reviews || []);
+      
+      const ordersRes = await ordersAPI.getAll();
+      setOrders(ordersRes.data?.orders || []);
     } catch (err) {
       console.error('Ошибка обновления отзывов на доставку:', err);
     }
   };
+
 
   const handleDeliveryReviewSubmit = async (e) => {
     e.preventDefault();
@@ -8199,16 +8635,20 @@ export default function ProfilePage() {
     );
   }
 
+  const displayName = profile?.name || profile?.email;
+  const displayEmail = profile?.name ? profile?.email : null;
+
   return (
     <div className={styles.page}>
       <div className="container">
         {/* Шапка профиля */}
         <div className={styles.profileHeader}>
           <div className={styles.avatar}>
-            {profile?.email?.[0]?.toUpperCase()}
+            {displayName?.[0]?.toUpperCase()}
           </div>
           <div>
-            <h1 className={styles.profileName}>{profile?.email}</h1>
+            <h1 className={styles.profileName}>{displayName}</h1>
+            {displayEmail && <p className={styles.profileEmail}>{displayEmail}</p>}
             <p className={styles.profileRole}>
               {profile?.role === 'ADMIN' ? 'Администратор' : 'Покупатель'}
             </p>
@@ -8292,7 +8732,6 @@ export default function ProfilePage() {
                       </div>
                     </div>
 
-                    {/* СЕКЦИЯ ТОВАРОВ */}
                     <div className={styles.orderItems}>
                       <p className={styles.orderItemsTitle}>Товары</p>
                       {order.items?.map((item, i) => {
@@ -8302,7 +8741,6 @@ export default function ProfilePage() {
                             <span className={styles.orderItem}>
                               {item.name} × {item.quantity}
                             </span>
-                            {/* Кнопка только для DONE без отзыва */}
                             {isDone && !itemHasReview && (
                               <button
                                 className={styles.reviewBtn}
@@ -8311,7 +8749,6 @@ export default function ProfilePage() {
                                 Оставить отзыв
                               </button>
                             )}
-                            {/* Статус "Оценено" если отзыв есть (любой статус) */}
                             {itemHasReview && (
                               <span className={styles.reviewDone}>Оценено</span>
                             )}
@@ -8320,14 +8757,12 @@ export default function ProfilePage() {
                       })}
                     </div>
 
-                    {/* СЕКЦИЯ ДОСТАВКИ */}
                     <div className={styles.deliverySection}>
                       <p className={styles.orderItemsTitle}>Доставка</p>
                       <div className={styles.deliveryRow}>
                         <span className={styles.deliveryAddress}>
                           {order.deliveryAddress || '—'}
                         </span>
-                        {/* Кнопка только для DONE без отзыва */}
                         {isDone && !orderHasDeliveryReview && (
                           <button
                             className={styles.reviewBtn}
@@ -8336,11 +8771,9 @@ export default function ProfilePage() {
                             Оценить доставку
                           </button>
                         )}
-                        {/* Статус если отзыв есть (любой статус) */}
                         {orderHasDeliveryReview && (
                           <span className={styles.reviewDone}>Доставка оценена</span>
                         )}
-                        {/* Для не-DONE без отзыва показываем адрес без кнопки */}
                         {!isDone && !orderHasDeliveryReview && (
                           <span className={styles.deliveryPending}>В процессе</span>
                         )}
@@ -8393,7 +8826,6 @@ export default function ProfilePage() {
               <p className={styles.emptyTab}>Вы еще не оставили ни одного отзыва</p>
             ) : (
               <>
-                {/* Отзывы на товары */}
                 {myReviews.length > 0 && (
                   <div className={styles.reviewsSection}>
                     <h3 className={styles.reviewsSectionTitle}>Отзывы на товары</h3>
@@ -8427,7 +8859,6 @@ export default function ProfilePage() {
                   </div>
                 )}
 
-                {/* Отзывы на доставку */}
                 {myDeliveryReviews.length > 0 && (
                   <div className={styles.reviewsSection}>
                     <h3 className={styles.reviewsSectionTitle}>Отзывы на доставку</h3>
@@ -8470,6 +8901,17 @@ export default function ProfilePage() {
           <div className={styles.tabContent}>
             <form className={styles.settingsForm} onSubmit={handleSave}>
               <h2 className={styles.settingsTitle}>Редактирование профиля</h2>
+
+              <div className={styles.field}>
+                <label className={styles.label}>Имя</label>
+                <input
+                  type="text"
+                  className={styles.input}
+                  placeholder="Ваше имя"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
 
               <div className={styles.field}>
                 <label className={styles.label}>Email</label>
@@ -9182,6 +9624,12 @@ function statusLabel(status) {
   padding-top: 8px;
   border-top: 1px solid var(--gray-100);
 }
+
+.profileEmail {
+  font-size: 14px;
+  color: var(--gray-500);
+  margin-top: 2px;
+}
 </file>
 
 <file path="frontend/src/pages/Tracking/OrderTrackingPage.jsx">
@@ -9208,9 +9656,23 @@ export default function OrderTrackingPage() {
   const [reviewSent, setReviewSent] = useState(false);
   const [hasDeliveryReview, setHasDeliveryReview] = useState(false);
 
-  // Загрузка заказа, если пришли без state (F5 / прямой заход)
   useEffect(() => {
-    if (state.order) return;
+    if (state.order) {
+      const refreshOrder = async () => {
+        try {
+          const { data } = await ordersAPI.getAll();
+          const orders = data.orders || [];
+          const actualOrder = orders.find(o => o.id === state.order.id);
+          if (actualOrder) {
+            setOrder(actualOrder);
+            setDeliveryMinutes(actualOrder.deliveryMinutes || 30);
+          }
+        } catch {
+        }
+      };
+      refreshOrder();
+      return;
+    }
 
     const load = async () => {
       try {
@@ -9930,6 +10392,92 @@ export default function OrderTrackingPage() {
     .section-title { font-size: 24px; }
     .container { padding: 0 16px; }
   }
+</file>
+
+<file path="fruit-kray.service">
+[Unit]
+Description=Frukt Kray Backend API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/fruit-kray/backend
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=8080
+EnvironmentFile=/fruit-kray/backend/.env
+
+[Install]
+WantedBy=multi-user.target
+</file>
+
+<file path="nginx-fruit-kray.conf">
+server {
+    listen 80;
+    server_name fruitedge.ru www.fruitedge.ru;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name fruitedge.ru www.fruitedge.ru;
+
+    ssl_certificate /etc/letsencrypt/live/fruitedge.ru/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/fruitedge.ru/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    client_max_body_size 10M;
+
+    root /fruit-kray/frontend/build;
+    index index.html;
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|webp)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /uploads/ {
+        alias /root/fruit-kray/backend/uploads/;
+        expires 1y;
+        add_header Cache-Control "public";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "frukt-kray",
+  "version": "1.0.0",
+  "scripts": {
+    "install:all": "npm install --prefix backend && npm install --prefix frontend",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start",
+    "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm start\""
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
 </file>
 
 </files>
