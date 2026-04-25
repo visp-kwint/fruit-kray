@@ -26,7 +26,8 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
 }
 
 export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
-  if (![Role.ADMIN, Role.MODERATOR].includes((req.user?.role ?? '') as Role)) {
+  const role = req.user?.role;
+  if (role !== Role.ADMIN && role !== Role.MODERATOR) {
     res.status(403).json({ error: 'Доступ запрещён' });
     return;
   }
