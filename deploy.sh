@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-PROJECT_DIR="/root/fruit-kray"
+PROJECT_DIR="/fruit-kray"
 echo "🚀 Деплой Фрукт Край на fruitedge.ru..."
 
 cd "$PROJECT_DIR"
