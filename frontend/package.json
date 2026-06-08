@@ -2,7 +2,6 @@
   "name": "frukt-kray",
   "version": "1.0.0",
   "private": true,
-  "homepage": ".",
   "dependencies": {
     "@pbe/react-yandex-maps": "^1.2.5",
     "axios": "^1.6.5",
@@ -29,5 +28,6 @@
     "development": [
       "last 1 chrome version"
     ]
-  }
+  },
+  "homepage": "/"
 }

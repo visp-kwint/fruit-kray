@@ -3,6 +3,7 @@ import corsLib from 'cors';
 const allowedOrigins = [
   'https://fruitedge.ru',
   'http://fruitedge.ru',
+  'http://45.132.50.96',
   'http://localhost:3000',
 ];
 

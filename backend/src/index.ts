@@ -38,7 +38,7 @@ app.use('/api/reviews',          reviewsRouter);
 app.use('/api/delivery-reviews', deliveryReviewsRouter);
 app.use('/api/cart',             cartRouter);
 
-app.get('/health', (_req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'Фрукт Край API' });
 });
 
